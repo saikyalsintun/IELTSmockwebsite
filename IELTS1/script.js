@@ -1,0 +1,76 @@
+const TEST={
+1:[
+{n:1,a:['grieg'],p:'Name: Anna (1) ______'},
+{n:2,a:['march 15th'],p:'Date of birth'},
+{n:3,a:['ellendale'],p:'Address: 4 (3) ______ St.'},
+{n:4,a:['w5 2at'],p:'Post code'},
+{n:5,a:['0'],p:'Number of previous burglaries'},
+{n:6,a:['8 months'],p:'Time of apartment tenancy'},
+{n:7,a:['1'],p:'Number of occupants'},
+{n:8,a:['back door'],p:'Entry point of burglar'},
+{n:9,a:['g4168770'],p:'Serial number of lost computer'},
+{n:10,a:['silver-colored cloth'],p:'Material of stolen purse'}
+],
+2:[
+{n:11,o:{A:'Business school requirements.',B:'Directions to the business school.',C:'Explaining the business school experience.'},a:['C'],p:'What is the project that Mark and Gina want to start?'},
+{n:12,o:{A:'Business students.',B:'Business school applicants.',C:'Summer school attendees.'},a:['B'],p:'Who is the target audience?'},
+{n:13,o:{A:'Summer course lecture.',B:'Informational video.',C:'Pamphlet in the mail.'},a:['B'],p:'How will they convey the information?'},
+{n:14,o:{A:'students worry about their studies.',B:'they want to obtain a good grade.',C:'they want to attract future business school applicants.'},a:['A'],p:'They want to do this project because'},
+{n:15,a:['teaching methods'],p:'Academics — (15) ______ — 7 minutes'},
+{n:16,a:['accomodation','accommodation'],p:'(16) ______ — 6 minutes'},
+{n:17,a:['flats'],p:'(17) ______ — 6 minutes'},
+{n:18,a:['disco'],p:'Social activity — (18) ______ — 8 minutes'},
+{n:19,a:['international evening'],p:'Social activity — (19) ______ — 8 minutes'},
+{n:20,a:['two minutes'],p:'Conclusion — nearly (20) ______'}
+],
+3:[
+{n:21,o:{A:'tourists in the hotel in this area.',B:'local residents.',C:'people who are living in this area.'},a:['C'],p:'The subjects in questionnaire are'},
+{n:22,o:{A:'directly entered into the computer.',B:'scored by hand.',C:'submitted directly to Professor Curran.'},a:['A'],p:'The results of the questionnaire should be'},
+{n:23,o:{A:'To receive a good grade.',B:'To get advice.',C:'To earn high praise.'},a:['B'],p:'Why should John give a copy of plans to the professor?'},
+{n:24,o:{A:'Given by a group representative.',B:'Given by all members of the group.',C:'Given by the professor.'},a:['A'],p:'How will the instructions be presented?'},
+{n:25,o:{A:'Divide into 2 part to argue.',B:'Focus on the opinion of the interviewees.',C:'Take consideration of both sides.'},a:['C'],p:'What does Dani suggest to John when those subjects receive the questionnaire?'},
+{n:26,o:{A:'To earn respect from professors in the department.',B:'To raise his grade.',C:'To impress his professor.'},a:['A'],p:'Why is this project particularly important to John?'},
+{n:27,o:{A:'radio',B:'council meeting',C:'the television',D:'newspaper',E:'journal',F:'the Internet'},a:['E'],p:'Map'},
+{n:28,o:{A:'radio',B:'council meeting',C:'the television',D:'newspaper',E:'journal',F:'the Internet'},a:['D'],p:'Photo'},
+{n:29,o:{A:'radio',B:'council meeting',C:'the television',D:'newspaper',E:'journal',F:'the Internet'},a:['A'],p:'Budget'},
+{n:30,o:{A:'radio',B:'council meeting',C:'the television',D:'newspaper',E:'journal',F:'the Internet'},a:['B'],p:'Comment'}
+],
+4:[
+{n:31,o:{A:'It was the first ever Town Market.',B:'It has been covered extensively in local history classes.',C:'It is often mentioned in some literature of the library.'},a:['C'],p:'Why did the lecturer choose to focus on the Pleasanton Town Market?'},
+{n:32,o:{A:'handcrafts.',B:'vegetables.',C:'animals.'},a:['C'],p:'The Town Market originally made a large profit selling'},
+{n:33,o:{A:'reconstruction.',B:'development.',C:'defense.'},a:['B'],p:'The money that the marketers made contributes to local'},
+{n:34,o:{A:'agriculture.',B:'transport.',C:'city planning.'},a:['B'],p:'Market sales plummeted due to lack of viable'},
+{n:35,o:{A:'clock',B:'grounds for battle',C:'jail'},a:['C'],p:'Major John C. Wiley decided the Clock tower would be used as a ______ in the early stages of the uprising.'},
+{n:36,a:['market'],p:'Research methods: reference section — Objects: 36 ______'},
+{n:37,a:['interviews'],p:'Research methods: 37 ______ — Objects: Rebellion'},
+{n:38,a:['useless'],p:'Rebellion — bias makes it 38 ______'},
+{n:39,a:['photographs'],p:'Research method 39 ______ — Objects: Jim Wiley'},
+{n:40,a:['crime'],p:'newspaper archives — Objects: 40 ______'}
+]};
+
+const TITLES={1:'REGISTRATION FORM',2:'BUSINESS SCHOOL PROJECT',3:'QUESTIONNAIRE PROJECT',4:'PLEASANTON TOWN MARKET'};
+let state={part:1,answers:JSON.parse(localStorage.getItem('ieltsRegistrationTestAnswers')||'{}'),finished:false,seconds:1800,filter:'all'};
+const allQuestions=()=>Object.values(TEST).flat();
+const getQ=n=>allQuestions().find(q=>q.n===n);
+function norm(v){return String(v??'').trim().toLowerCase().replace(/[’']/g,"'").replace(/\s+/g,' ')}
+function answered(n){let v=state.answers[n];return Array.isArray(v)?v.length>0:typeof v==='string'&&v.trim()!==''}
+function save(n,v){state.answers[n]=v;localStorage.setItem('ieltsRegistrationTestAnswers',JSON.stringify(state.answers));updateNav();updateCount()}
+function input(n){let i=document.createElement('input');i.className='blank';i.value=state.answers[n]||'';i.addEventListener('input',e=>save(n,e.target.value));return i}
+function options(q){let box=document.createElement('div');box.className='options';Object.entries(q.o).forEach(([l,t])=>{let lab=document.createElement('label');lab.className='option';let r=document.createElement('input');r.type='radio';r.name='q'+q.n;r.value=l;r.checked=state.answers[q.n]===l;r.onchange=()=>save(q.n,l);let b=document.createElement('b');b.textContent=l+'.';let s=document.createElement('span');s.textContent=t;lab.append(r,b,s);box.append(lab)});return box}
+function block(title,inst){let b=document.createElement('section');b.className='block';let r=document.createElement('div');r.className='range';r.textContent=title;b.append(r);if(inst){let p=document.createElement('div');p.className='instruction';p.textContent=inst;b.append(p)}return b}
+function render(){document.querySelectorAll('#parts button').forEach(b=>b.classList.toggle('active',+b.dataset.part===state.part));document.getElementById('audioTitle').textContent='Part '+state.part+' Audio';document.getElementById('audio').src='audio/part'+state.part+'.mp3';let c=document.getElementById('content');c.innerHTML='';let h=document.createElement('div');h.className='heading';h.innerHTML='<h1>Section '+state.part+' — '+TITLES[state.part]+'</h1>';c.append(h);[render1,render2,render3,render4][state.part-1](c);updateNav();updateCount()}
+function render1(c){let b=block('Section 1 — Questions 1–10','Complete the form below. Write NO MORE THAN TWO WORDS AND/OR A NUMBER for each answer.');let t=document.createElement('table');t.className='form';t.innerHTML='<tr><th colspan="2">REGISTRATION FORM</th></tr><tr><td><i>Example: Type of crime report</i></td><td><u>Robbery</u></td></tr><tr><td>Name:</td><td>Anna '+''+'</td></tr>';let rows=[['Name:','Anna ',1,''],['Date of birth:','',2,''],['Address:','4 ',3,' St.'],['Post code:','',4,''],['Nationality:','Grenadian',null,''],['Number of previous burglaries:','',5,''],['Time of apartment tenancy:','',6,''],['Number of occupants:','',7,''],['Entry point of burglar:','',8,''],['Details of lost property — Serial number of lost computer:','',9,''],['Details of lost property — Material of stolen purse:','',10,'']];t.innerHTML='<tr><th colspan="2">REGISTRATION FORM</th></tr><tr><td><i>Example: Type of crime report</i></td><td><u>Robbery</u></td></tr>';rows.forEach(r=>{let tr=t.insertRow();tr.insertCell().textContent=r[0];let td=tr.insertCell();if(r[1])td.append(document.createTextNode(r[1]));if(r[2])td.append(input(r[2]));if(r[3])td.append(document.createTextNode(r[3]))});b.append(t);c.append(b)}
+function render2(c){let b=block('Questions 11–14','Answer the questions below. Choose the correct letter, A, B or C.');TEST[2].slice(0,4).forEach(q=>{let d=document.createElement('div');d.className='q';d.innerHTML='<b>'+q.n+'.</b> '+q.p;d.append(options(q));b.append(d)});c.append(b);let b2=block('Questions 15–20','Complete the table below. Write NO MORE THAN TWO WORDS for each answer.');let t=document.createElement('table');t.className='tableNote';t.innerHTML='<tr><th>Topic</th><th>Time</th></tr>';let rows=[[15,'Academics','7 minutes'],[16,'','6 minutes'],[17,'- cafeteria /','6 minutes'],[18,'Social activity —','8 minutes'],[19,'Social activity —','8 minutes'],[20,'Conclusion','nearly']];rows.forEach(r=>{let tr=t.insertRow();tr.insertCell().append(document.createTextNode(r[1]+' '),input(r[0]));tr.insertCell().textContent=r[2]});b2.append(t);c.append(b2)}
+function render3(c){let b=block('Questions 21–26','Choose the correct letter, A, B or C.');TEST[3].slice(0,6).forEach(q=>{let d=document.createElement('div');d.className='q';d.innerHTML='<b>'+q.n+'.</b> '+q.p;d.append(options(q));b.append(d)});c.append(b);let b2=block('Questions 27–30','What is the source of each one below in this survey? Choose FOUR answers from the box and write the letters A–F next to questions 27–30.');let mb=document.createElement('div');mb.className='matchBox';Object.entries(TEST[3][6].o).forEach(([l,t])=>{let d=document.createElement('div');d.innerHTML='<b>'+l+'</b> '+t;mb.append(d)});b2.append(mb);let g=document.createElement('div');g.className='matchGrid';TEST[3].slice(6).forEach(q=>{let row=document.createElement('div');row.className='matchRow';row.innerHTML='<b>'+q.n+'.</b> '+q.p+' ';let s=document.createElement('select');s.className='select-answer';s.innerHTML='<option value="">Select</option>'+Object.keys(q.o).map(x=>'<option>'+x+'</option>').join('');s.value=state.answers[q.n]||'';s.onchange=e=>save(q.n,e.target.value);row.append(s);g.append(row)});b2.append(g);c.append(b2)}
+function render4(c){let b=block('Questions 31–35','Choose the correct letter, A, B or C.');TEST[4].slice(0,5).forEach(q=>{let d=document.createElement('div');d.className='q';d.innerHTML='<b>'+q.n+'.</b> '+q.p;d.append(options(q));b.append(d)});c.append(b);let b2=block('Questions 36–40','Complete the table below. Write ONLY ONE WORD for each answer.');let t=document.createElement('table');t.className='tableNote';t.innerHTML='<tr><th>Research Methods</th><th>Objects</th><th>Problems</th></tr>';let rows=[[36,'reference section','', 'there is too much information'],[37,'','Rebellion','bias makes it'],[38,'','Rebellion','bias makes it'],[39,'','Jim Wiley','the information is insufficient'],[40,'newspaper archives','','more detail is needed']];t.innerHTML='<tr><th>Research Methods</th><th>Objects</th><th>Problems</th></tr>';let tr=t.insertRow();tr.insertCell().textContent='reference section';tr.insertCell().append(input(36));tr.insertCell().textContent='there is too much information';tr=t.insertRow();tr.insertCell().append(input(37));tr.insertCell().textContent='Rebellion';tr.insertCell().append(document.createTextNode('bias makes it '),input(38));tr=t.insertRow();tr.insertCell().append(input(39));tr.insertCell().textContent='Jim Wiley';tr.insertCell().textContent='the information is insufficient';tr=t.insertRow();tr.insertCell().textContent='newspaper archives';tr.insertCell().append(input(40));tr.insertCell().textContent='more detail is needed';b2.append(t);c.append(b2)}
+function updateNav(){let n=document.getElementById('questionNav');n.innerHTML='';for(let i=1;i<=40;i++){let b=document.createElement('button');b.className='qnav'+(answered(i)?' answered':'');b.textContent=i;b.onclick=()=>{state.part=i<=10?1:i<=20?2:i<=30?3:4;render();window.scrollTo({top:0,behavior:'smooth'})};n.append(b)}}
+function updateCount(){document.getElementById('answeredCount').textContent=Array.from({length:40},(_,i)=>answered(i+1)).filter(Boolean).length}
+function correct(n){let q=getQ(n),v=state.answers[n];return q.a.some(x=>norm(v)===norm(x))}
+function band(s){return s>=39?9:s>=37?8.5:s>=35?8:s>=32?7.5:s>=30?7:s>=26?6.5:s>=23?6:s>=18?5.5:s>=16?5:s>=13?4.5:s>=10?4:s>=8?3.5:s>=6?3:s>=4?2.5:s===3?2:s===2?1.5:s===1?1:0}
+function finish(){document.getElementById('confirmModal').classList.add('hidden');['topbar','parts','testLayout','footer'].forEach(id=>document.getElementById(id).classList.add('hidden'));document.getElementById('results').classList.remove('hidden');let score=0,u=0;for(let n=1;n<=40;n++){if(correct(n))score++;if(!answered(n))u++}document.getElementById('scoreText').textContent=score+'/40';document.getElementById('bandText').textContent=band(score).toFixed(1);document.getElementById('correctText').textContent=score;document.getElementById('wrongText').textContent=40-score;document.getElementById('unansweredText').textContent=u;document.getElementById('accuracyText').textContent=Math.round(score/40*100)+'%';partscores();review()}
+function partscores(){let box=document.getElementById('partScores');box.innerHTML='';[[1,1,10],[2,11,20],[3,21,30],[4,31,40]].forEach(x=>{let s=0;for(let n=x[1];n<=x[2];n++)if(correct(n))s++;let d=document.createElement('div');d.className='partCard';d.innerHTML='<div class="scoreLine"><b>Part '+x[0]+'</b><b>'+s+'/10</b></div><div class="scoreBig">'+s+' correct</div><div class="bar"><i style="width:'+s*10+'%"></i></div>';box.append(d)})}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function review(){let box=document.getElementById('review');box.innerHTML='';for(let n=1;n<=40;n++){let good=correct(n);if(state.filter==='wrong'&&good)continue;let q=getQ(n),d=document.createElement('div');d.className='reviewItem '+(good?'good':'bad');d.innerHTML='<div class="reviewHead"><b>'+n+'. '+esc(q.p)+'</b><span class="status">'+(good?'✓ Correct':'✗ Incorrect')+'</span></div><div class="answerLine"><label>Your answer</label><span>'+esc(state.answers[n]||'—')+'</span></div>'+(good?'':'<div class="answerLine"><label>Correct answer</label><span class="correctAnswer">'+esc(q.a.join(' / '))+'</span></div>');box.append(d)}}
+document.querySelectorAll('#parts button').forEach(b=>b.onclick=()=>{state.part=+b.dataset.part;render()});document.getElementById('audioFile').onchange=e=>{if(e.target.files[0])document.getElementById('audio').src=URL.createObjectURL(e.target.files[0])};document.getElementById('finishBtn').onclick=()=>document.getElementById('confirmModal').classList.remove('hidden');document.getElementById('continueBtn').onclick=()=>document.getElementById('confirmModal').classList.add('hidden');document.getElementById('confirmFinishBtn').onclick=finish;document.querySelectorAll('.filter').forEach(b=>b.onclick=()=>{document.querySelectorAll('.filter').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.filter=b.dataset.filter;review()});document.getElementById('printBtn').onclick=()=>window.print();document.getElementById('restartBtn').onclick=()=>{localStorage.removeItem('ieltsRegistrationTestAnswers');location.reload()};
+setInterval(()=>{if(document.getElementById('results').classList.contains('hidden')===false)return;if(state.seconds>0)state.seconds--;let m=String(Math.floor(state.seconds/60)).padStart(2,'0'),s=String(state.seconds%60).padStart(2,'0');document.getElementById('timer').textContent=m+':'+s;if(state.seconds===0)finish()},1000);
+render();

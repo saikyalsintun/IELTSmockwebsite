@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IELTS Listening Practice</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="topbar"><b>IELTS Listening</b><span>Listening Practice Test</span><strong id="timer">30:00</strong></header>
+<nav id="parts">
+<button class="active" data-part="1">Part 1</button><button data-part="2">Part 2</button><button data-part="3">Part 3</button><button data-part="4">Part 4</button>
+</nav>
+<div class="layout" id="testLayout">
+<aside><h3>Questions</h3><div id="questionNav"></div></aside>
+<main>
+<div class="audioBox"><b id="audioTitle">Part 1 Audio</b><audio id="audio" controls></audio><label class="audioBtn">Choose audio<input id="audioFile" type="file" accept="audio/*"></label></div>
+<div id="content"></div>
+</main></div>
+<footer id="footer"><span><b id="answeredCount">0</b> / 40 answered</span><button class="finishBtn" id="finishBtn">Finish Test</button></footer>
+
+<div class="modal hidden" id="confirmModal"><div class="modalBox"><h2>Finish Test?</h2><p>Unfinished answers will be marked as incorrect.</p><div class="modalActions"><button id="continueBtn">Continue Test</button><button class="finishBtn" id="confirmFinishBtn">Finish Test</button></div></div></div>
+
+<section class="results hidden" id="results"><div class="resultsWrap">
+<div class="resultHeader"><div><small>IELTS LISTENING PRACTICE</small><h1>Test Results</h1><p>Part scores and overall performance</p></div><div class="bigScore"><b id="scoreText">0/40</b><span>Estimated Band</span><strong id="bandText">0.0</strong></div></div>
+<div class="summaryGrid"><div>Correct<strong id="correctText">0</strong></div><div>Incorrect<strong id="wrongText">0</strong></div><div>Unanswered<strong id="unansweredText">0</strong></div><div>Accuracy<strong id="accuracyText">0%</strong></div></div>
+<div class="resultActions"><button id="printBtn">Print / Save PDF — Part Scores</button><button class="finishBtn" id="restartBtn">Start Again</button></div>
+<div class="panel partScorePanel"><div class="panelTitle"><div><small>PERFORMANCE BREAKDOWN</small><h2>Part Scores</h2></div><span>40 questions total</span></div><div id="partScores" class="partScores"></div></div>
+<div class="panel reviewPanel"><div class="reviewTop"><div><h2>Question Review</h2><p>Your answer vs. the correct answer</p></div><div><button class="filter active" data-filter="all">All</button><button class="filter" data-filter="wrong">Wrong</button></div></div><div id="review"></div></div>
+
+</div></section>
+<script src="script.js"></script>
+</body></html>
