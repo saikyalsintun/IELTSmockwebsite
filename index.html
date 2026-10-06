@@ -645,9 +645,258 @@
         @media(max-width:600px){.portal-screen{padding:55px 5%}.portal-header h2{font-size:31px}}
 
     </style>
+
+<style id="studentLoginStyles">
+    body.auth-locked > *:not(#studentLoginOverlay) {
+        display: none !important;
+    }
+
+    #studentLoginOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 999999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        background:
+            radial-gradient(circle at 85% 15%, rgba(76,103,190,.14), transparent 30%),
+            radial-gradient(circle at 15% 85%, rgba(70,91,170,.08), transparent 30%),
+            #f5f7fb;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+
+    .student-login-card {
+        width: min(440px, 100%);
+        background: #fff;
+        border: 1px solid #e4e8ef;
+        border-radius: 22px;
+        padding: 36px;
+        box-shadow: 0 25px 70px rgba(32,48,83,.14);
+    }
+
+    .student-login-brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        margin-bottom: 30px;
+        color: #182338;
+        font-size: 20px;
+        font-weight: 800;
+    }
+
+    .student-login-brand-icon {
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        background: #263b80;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+    }
+
+    .student-login-badge {
+        display: inline-flex;
+        padding: 7px 11px;
+        border-radius: 20px;
+        background: #e9edfb;
+        color: #30468e;
+        font-size: 11px;
+        font-weight: 800;
+        margin-bottom: 15px;
+    }
+
+    .student-login-card h1 {
+        color: #162033;
+        font-size: 32px;
+        letter-spacing: -1px;
+        margin-bottom: 9px;
+    }
+
+    .student-login-card .login-subtitle {
+        color: #737e93;
+        font-size: 14px;
+        line-height: 1.65;
+        margin-bottom: 26px;
+    }
+
+    .student-login-field {
+        margin-bottom: 17px;
+    }
+
+    .student-login-field label {
+        display: block;
+        color: #34405b;
+        font-size: 13px;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+
+    .student-login-field input {
+        width: 100%;
+        height: 48px;
+        border: 1px solid #dfe3eb;
+        border-radius: 10px;
+        padding: 0 14px;
+        outline: none;
+        color: #172033;
+        background: #fff;
+        font-size: 14px;
+        transition: .2s;
+    }
+
+    .student-login-field input:focus {
+        border-color: #4059a2;
+        box-shadow: 0 0 0 3px rgba(64,89,162,.10);
+    }
+
+    .student-login-button {
+        width: 100%;
+        height: 49px;
+        border: 0;
+        border-radius: 10px;
+        background: #263b80;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 800;
+        cursor: pointer;
+        transition: .2s;
+        margin-top: 4px;
+    }
+
+    .student-login-button:hover {
+        background: #1d2e68;
+        transform: translateY(-1px);
+    }
+
+    .student-login-button:disabled {
+        opacity: .65;
+        cursor: wait;
+        transform: none;
+    }
+
+    .student-login-error {
+        display: none;
+        margin-bottom: 17px;
+        padding: 11px 13px;
+        border-radius: 9px;
+        background: #fff0f0;
+        border: 1px solid #f0cccc;
+        color: #a33b3b;
+        font-size: 12px;
+        line-height: 1.5;
+    }
+
+    .student-login-footer {
+        margin-top: 20px;
+        text-align: center;
+        color: #8a93a5;
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    .student-user-area {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .student-user-name {
+        color: #526079;
+        font-size: 12px;
+        font-weight: 700;
+    }
+
+    .student-logout-button {
+        border: 1px solid #dfe3eb;
+        background: #fff;
+        color: #34405b;
+        padding: 8px 11px;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .student-logout-button:hover {
+        border-color: #bbc4d8;
+    }
+
+    @media (max-width: 600px) {
+        .student-login-card {
+            padding: 28px 22px;
+            border-radius: 18px;
+        }
+        .student-login-card h1 {
+            font-size: 28px;
+        }
+        .student-user-name {
+            display: none;
+        }
+    }
+</style>
+
 </head>
 
-<body>
+<body class="auth-locked">
+
+<!-- =====================================================
+     STUDENT LOGIN
+====================================================== -->
+<div id="studentLoginOverlay">
+    <div class="student-login-card">
+        <div class="student-login-brand">
+            <div class="student-login-brand-icon">I</div>
+            IELTS Practice
+        </div>
+
+        <div class="student-login-badge">STUDENT ACCESS</div>
+
+        <h1>Welcome back</h1>
+        <p class="login-subtitle">
+            Sign in with the username and password provided by your teacher.
+        </p>
+
+        <div id="studentLoginError" class="student-login-error"></div>
+
+        <form id="studentLoginForm" autocomplete="on">
+            <div class="student-login-field">
+                <label for="studentUsername">Username</label>
+                <input
+                    id="studentUsername"
+                    name="username"
+                    type="text"
+                    autocomplete="username"
+                    placeholder="Enter your username"
+                    required
+                >
+            </div>
+
+            <div class="student-login-field">
+                <label for="studentPassword">Password</label>
+                <input
+                    id="studentPassword"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    placeholder="Enter your password"
+                    required
+                >
+            </div>
+
+            <button id="studentLoginButton" class="student-login-button" type="submit">
+                Sign In
+            </button>
+        </form>
+
+        <div class="student-login-footer">
+            Your account must be Active in the teacher's Google Sheet.
+        </div>
+    </div>
+</div>
+
 
     <!-- =========================
          NAVIGATION
@@ -663,6 +912,14 @@
             <a href="#tests">Practice Tests</a>
             <a href="#features">Features</a>
         </div>
+
+            <div class="student-user-area" id="studentUserArea" style="display:none;">
+                <span class="student-user-name" id="studentUserName"></span>
+                <button type="button" class="student-logout-button" id="studentLogoutButton">
+                    Log out
+                </button>
+            </div>
+
     </nav>
 
 
@@ -1059,6 +1316,168 @@
     })();
     </script>
 
+
+<script id="studentLoginScript">
+(function () {
+    "use strict";
+
+    /*
+     * IMPORTANT:
+     * Replace this URL with your deployed Google Apps Script Web App URL.
+     * Example:
+     * https://script.google.com/macros/s/XXXXXXXXXXXX/exec
+     */
+    const GOOGLE_APPS_SCRIPT_URL = "PASTE_YOUR_GOOGLE_APPS_SCRIPT_WEB_APP_URL_HERE";
+
+    const SESSION_KEY = "ieltsStudentSession";
+
+    const overlay = document.getElementById("studentLoginOverlay");
+    const form = document.getElementById("studentLoginForm");
+    const usernameInput = document.getElementById("studentUsername");
+    const passwordInput = document.getElementById("studentPassword");
+    const button = document.getElementById("studentLoginButton");
+    const errorBox = document.getElementById("studentLoginError");
+    const userArea = document.getElementById("studentUserArea");
+    const userName = document.getElementById("studentUserName");
+    const logoutButton = document.getElementById("studentLogoutButton");
+
+    function showError(message) {
+        errorBox.textContent = message || "Login failed.";
+        errorBox.style.display = "block";
+    }
+
+    function clearError() {
+        errorBox.textContent = "";
+        errorBox.style.display = "none";
+    }
+
+    function setLoggedIn(student) {
+        const safeStudent = {
+            studentId: String(student.studentId || ""),
+            username: String(student.username || ""),
+            status: String(student.status || "Active")
+        };
+
+        localStorage.setItem(SESSION_KEY, JSON.stringify(safeStudent));
+
+        document.body.classList.remove("auth-locked");
+        overlay.style.display = "none";
+
+        if (userArea) {
+            userArea.style.display = "flex";
+        }
+
+        if (userName) {
+            userName.textContent = safeStudent.username;
+        }
+    }
+
+    function logout() {
+        localStorage.removeItem(SESSION_KEY);
+        document.body.classList.add("auth-locked");
+        overlay.style.display = "flex";
+
+        if (userArea) {
+            userArea.style.display = "none";
+        }
+
+        form.reset();
+        clearError();
+        usernameInput.focus();
+        window.scrollTo(0, 0);
+    }
+
+    function restoreSession() {
+        try {
+            const saved = localStorage.getItem(SESSION_KEY);
+
+            if (!saved) {
+                overlay.style.display = "flex";
+                return;
+            }
+
+            const student = JSON.parse(saved);
+
+            if (!student || !student.username || !student.studentId) {
+                throw new Error("Invalid session");
+            }
+
+            setLoggedIn(student);
+        } catch (error) {
+            localStorage.removeItem(SESSION_KEY);
+            overlay.style.display = "flex";
+        }
+    }
+
+    async function login(username, password) {
+        if (!GOOGLE_APPS_SCRIPT_URL ||
+            GOOGLE_APPS_SCRIPT_URL.indexOf("PASTE_YOUR_") === 0) {
+            throw new Error(
+                "Google Apps Script URL has not been added yet. Open index.html and replace GOOGLE_APPS_SCRIPT_URL."
+            );
+        }
+
+        const response = await fetch(GOOGLE_APPS_SCRIPT_URL, {
+            method: "POST",
+            headers: {
+                "Content-Type": "text/plain;charset=utf-8"
+            },
+            body: JSON.stringify({
+                action: "login",
+                data: {
+                    username: username,
+                    password: password
+                }
+            })
+        });
+
+        if (!response.ok) {
+            throw new Error("Could not connect to the login server.");
+        }
+
+        const result = await response.json();
+
+        if (!result.success) {
+            throw new Error(result.message || "Invalid username or password.");
+        }
+
+        return result;
+    }
+
+    form.addEventListener("submit", async function (event) {
+        event.preventDefault();
+        clearError();
+
+        const username = usernameInput.value.trim();
+        const password = passwordInput.value;
+
+        if (!username || !password) {
+            showError("Please enter both username and password.");
+            return;
+        }
+
+        button.disabled = true;
+        button.textContent = "Signing in...";
+
+        try {
+            const result = await login(username, password);
+            setLoggedIn(result.student);
+        } catch (error) {
+            console.error(error);
+            showError(error.message || "Login failed. Please try again.");
+        } finally {
+            button.disabled = false;
+            button.textContent = "Sign In";
+        }
+    });
+
+    if (logoutButton) {
+        logoutButton.addEventListener("click", logout);
+    }
+
+    restoreSession();
+})();
+</script>
+
 </body>
 </html>
-```
