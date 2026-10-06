@@ -1,45 +1,36 @@
 /* =========================================================
-   IELTS READING PRACTICE
-   LOCAL STORAGE VERSION
-   =========================================================
-
-   FEATURES
+   IELTS READING PRACTICE WEBSITE
+   COMPLETE UPDATED app.js
    ---------------------------------------------------------
-   ✓ 8 Reading Tests
-   ✓ Local JSON test files
-   ✓ LocalStorage answers
-   ✓ No login
-   ✓ No API
-   ✓ No Google Sheets
-   ✓ No Teacher/Admin
-   ✓ 60-minute timer
-   ✓ Auto submit
-   ✓ True / False / Not Given
-   ✓ Yes / No / Not Given
-   ✓ Fill in the blanks
-   ✓ Summary completion
-   ✓ Multiple choice
-   ✓ Multiple choice multiple
-   ✓ Matching headings
-   ✓ Matching information
-   ✓ Matching features
-   ✓ Answer box
-   ✓ Drag & drop
-   ✓ Mobile click-to-place
-   ✓ Question navigator
-   ✓ Score calculation
-   ✓ IELTS band calculation
-   ✓ Incorrect answer review
-   ✓ Print / Save PDF
-
-   IMPORTANT
+   LOCAL VERSION
    ---------------------------------------------------------
-   This file is designed to work with:
+   NO:
+   - Login
+   - API
+   - Google Sheets
+   - Teacher/Admin
+   - Online answer storage
 
-       tests/Test1.json
-       tests/Test2.json
-       ...
-       tests/Test8.json
+   YES:
+   - LocalStorage
+   - 8 Reading Tests
+   - 60 minute timer
+   - All major IELTS Reading question types
+   - Matching Information A-G
+   - Matching Headings
+   - Matching Features
+   - Fill in the blanks
+   - Summary Completion
+   - Multiple Choice
+   - Multiple Answer
+   - True / False / Not Given
+   - Yes / No / Not Given
+   - Answer Box
+   - Question Navigator
+   - Result Page
+   - IELTS Band
+   - Incorrect Answer Review
+   - Print / Save PDF
 ========================================================= */
 
 
@@ -50,10 +41,9 @@
 const CONFIG = {
     TEST_COUNT: 8,
     TEST_FOLDER: "./tests/",
-    VOCABULARY_FILE: "./vocabulary.json",
     DEFAULT_DURATION: 60,
-    ANSWER_PREFIX: "ieltsReadingAnswers_",
-    RESULT_PREFIX: "ieltsReadingResult_"
+    ANSWER_STORAGE_PREFIX: "ielts_reading_answers_",
+    RESULT_STORAGE_PREFIX: "ielts_reading_result_"
 };
 
 
@@ -63,13 +53,9 @@ const CONFIG = {
 
 let currentTest = null;
 let currentTestNumber = null;
-
 let currentPartIndex = 0;
 
 let studentAnswers = {};
-let submittedAnswers = {};
-
-let vocabulary = {};
 
 let timerInterval = null;
 let remainingSeconds = 0;
@@ -86,46 +72,30 @@ let selectedDragOption = null;
 
 
 /* =========================================================
-   STARTUP
-   ========================================================= */
+   START APPLICATION
+========================================================= */
 
-window.addEventListener("DOMContentLoaded", function () {
+window.addEventListener(
+    "DOMContentLoaded",
+    function () {
 
-    try {
-
-        injectDragDropStyles();
-        injectResultStyles();
+        injectApplicationStyles();
 
         setupGlobalEvents();
 
-        removeTeacherAdminElements();
-
         /*
          * IMPORTANT:
-         *
-         * Do NOT wait for vocabulary before displaying
-         * the dashboard.
-         *
-         * If vocabulary.json is missing, the website
-         * must still work.
+         * Do not wait for vocabulary to load.
+         * The dashboard must still appear if vocabulary.json
+         * does not exist.
          */
-
-        showDashboard();
-
         loadVocabulary();
 
-    } catch (error) {
+        removeLoginAndAdminElements();
 
-        console.error(
-            "IELTS Reading startup error:",
-            error
-        );
-
-        emergencyShowDashboard();
-
+        showDashboard();
     }
-
-});
+);
 
 
 /* =========================================================
@@ -181,13 +151,8 @@ function setupGlobalEvents() {
     );
 
     addClick(
-        "closeVocabularyPopup",
-        closeVocabularyPopup
-    );
-
-    addClick(
-        "closeConfirmModal",
-        closeConfirmModal
+        "confirmSubmitButton",
+        submitTest
     );
 
     addClick(
@@ -196,23 +161,71 @@ function setupGlobalEvents() {
     );
 
     addClick(
-        "confirmSubmitButton",
-        submitTest
+        "closeConfirmModal",
+        closeConfirmModal
+    );
+
+    addClick(
+        "closeVocabularyPopup",
+        closeVocabularyPopup
     );
 
     /*
-     * Close vocabulary popup when clicking outside.
+     * Some HTML versions use this ID.
      */
+    addClick(
+        "printResultButton",
+        printScorePDF
+    );
 
+    /*
+     * Some HTML versions may use another ID.
+     */
+    addClick(
+        "printScoreButton",
+        printScorePDF
+    );
+
+    /*
+     * Retake from result page.
+     */
+    addClick(
+        "resultRetakeButton",
+        function () {
+
+            if (currentTest) {
+                startTest();
+            }
+
+        }
+    );
+
+    /*
+     * Dashboard buttons.
+     */
+    addClick(
+        "resultDashboardButton",
+        showDashboard
+    );
+
+    addClick(
+        "returnToDashboardButton",
+        showDashboard
+    );
+
+    /*
+     * Close vocabulary popup.
+     */
     document.addEventListener(
         "click",
         function (event) {
 
-            if (
+            const vocabularyElement =
                 event.target.closest(
                     ".vocabulary-word"
-                )
-            ) {
+                );
+
+            if (vocabularyElement) {
                 return;
             }
 
@@ -226,7 +239,9 @@ function setupGlobalEvents() {
                 popup.style.display !== "none" &&
                 !popup.contains(event.target)
             ) {
+
                 closeVocabularyPopup();
+
             }
 
         }
@@ -236,10 +251,13 @@ function setupGlobalEvents() {
 
 
 /* =========================================================
-   ADD CLICK SAFELY
+   ADD CLICK
 ========================================================= */
 
-function addClick(id, handler) {
+function addClick(
+    id,
+    handler
+) {
 
     const element =
         document.getElementById(id);
@@ -257,81 +275,119 @@ function addClick(id, handler) {
 
 
 /* =========================================================
-   REMOVE TEACHER / ADMIN
+   REMOVE LOGIN / ADMIN
 ========================================================= */
 
-function removeTeacherAdminElements() {
+function removeLoginAndAdminElements() {
 
-    const ids = [
-
-        "teacherAdminButton",
-        "adminButton",
-        "teacherButton",
-        "teacherAdminLink",
-        "adminLink",
-        "teacherLink",
-        "teacherAdmin",
-        "adminPanelButton"
-
+    const selectors = [
+        "#loginScreen",
+        "#loginForm",
+        "#logoutButton",
+        "#adminButton",
+        "#teacherButton",
+        "#teacherDashboardButton",
+        "#adminDashboardButton",
+        "#historySection",
+        "#historyTable",
+        "#studentLogin",
+        ".login-section",
+        ".admin-section",
+        ".teacher-section"
     ];
 
-    ids.forEach(function (id) {
+    selectors.forEach(
+        function (selector) {
 
-        const element =
-            document.getElementById(id);
+            document
+                .querySelectorAll(selector)
+                .forEach(
+                    function (element) {
 
-        if (element) {
-            element.remove();
+                        /*
+                         * Do not remove the entire screen
+                         * if it is part of the application.
+                         */
+                        if (
+                            element.id ===
+                            "loginScreen"
+                        ) {
+
+                            element.style.display =
+                                "none";
+
+                        } else {
+
+                            element.remove();
+
+                        }
+
+                    }
+                );
+
         }
+    );
 
-    });
-
-
-    /*
-     * Remove the actual Admin.html link
-     * from your existing HTML.
-     */
-
-    document
-        .querySelectorAll(
-            'a[href*="Admin.html"], a[href*="admin.html"]'
-        )
-        .forEach(function (element) {
-
-            element.remove();
-
-        });
+}
 
 
-    /*
-     * Remove obvious teacher/admin buttons.
-     */
+/* =========================================================
+   SCREEN CONTROL
+========================================================= */
+
+function showScreen(id) {
 
     document
-        .querySelectorAll(
-            "button, a"
-        )
-        .forEach(function (element) {
+        .querySelectorAll(".screen")
+        .forEach(
+            function (element) {
 
-            const text =
-                (
-                    element.textContent || ""
-                )
-                    .trim()
-                    .toLowerCase();
+                element.style.display =
+                    "none";
 
-            if (
-                text === "teacher" ||
-                text === "admin" ||
-                text === "teacher admin" ||
-                text === "teacher/admin"
-            ) {
-
-                element.remove();
+                element.classList.remove(
+                    "active"
+                );
 
             }
+        );
 
-        });
+    const target =
+        document.getElementById(id);
+
+    if (!target) {
+
+        console.warn(
+            "Screen not found:",
+            id
+        );
+
+        return;
+
+    }
+
+    /*
+     * IMPORTANT:
+     * Explicitly use block.
+     *
+     * The original HTML has:
+     * style="display:none"
+     *
+     * Therefore:
+     * style.display = ""
+     * DOES NOT work.
+     */
+    target.style.display =
+        "block";
+
+    target.classList.add(
+        "active"
+    );
+
+    window.scrollTo(
+        0,
+        0
+    );
 
 }
 
@@ -347,56 +403,11 @@ async function showDashboard() {
     testStarted = false;
     testSubmitted = false;
 
-    closeConfirmModal();
-
     showScreen(
         "dashboardScreen"
     );
 
     await renderTestCards();
-
-}
-
-
-/* =========================================================
-   EMERGENCY DASHBOARD
-   Prevents completely blank page.
-========================================================= */
-
-function emergencyShowDashboard() {
-
-    const screens =
-        document.querySelectorAll(
-            ".screen"
-        );
-
-    screens.forEach(function (screen) {
-
-        screen.style.display =
-            "none";
-
-        screen.classList.remove(
-            "active"
-        );
-
-    });
-
-
-    const dashboard =
-        document.getElementById(
-            "dashboardScreen"
-        );
-
-    if (dashboard) {
-
-        dashboard.style.display =
-            "block";
-
-        dashboard.classList.add(
-            "active"
-        );
-
-    }
 
 }
 
@@ -416,9 +427,9 @@ async function renderTestCards() {
         return;
     }
 
-
     box.innerHTML = "";
 
+    const tests = [];
 
     for (
         let i = 1;
@@ -426,58 +437,75 @@ async function renderTestCards() {
         i++
     ) {
 
-        const card =
-            document.createElement(
-                "div"
-            );
-
-        card.className =
-            "test-card";
-
-        card.dataset.testNumber =
-            i;
-
-
-        card.innerHTML = `
-
-            <div class="test-card-number">
-                Test ${i}
-            </div>
-
-            <h3>
-                IELTS Reading Test ${i}
-            </h3>
-
-            <div class="test-card-info">
-
-                <span>
-                    ${CONFIG.DEFAULT_DURATION} minutes
-                </span>
-
-                <span>
-                    40 questions
-                </span>
-
-            </div>
-
-        `;
-
-
-        card.addEventListener(
-            "click",
-            function () {
-
-                openTest(i);
-
-            }
-        );
-
-
-        box.appendChild(
-            card
-        );
+        tests.push(i);
 
     }
+
+    /*
+     * We do not use HEAD requests here.
+     * GitHub Pages and some hosting environments
+     * can reject HEAD.
+     *
+     * Instead, simply create all 8 cards.
+     */
+    tests.forEach(
+        function (number) {
+
+            const card =
+                document.createElement(
+                    "div"
+                );
+
+            card.className =
+                "test-card";
+
+            card.dataset.testNumber =
+                number;
+
+            card.innerHTML = `
+                <div class="test-card-number">
+                    TEST ${number}
+                </div>
+
+                <h3>
+                    IELTS Reading Test ${number}
+                </h3>
+
+                <div class="test-card-info">
+                    <span>
+                        60 Minutes
+                    </span>
+
+                    <span>
+                        40 Questions
+                    </span>
+                </div>
+
+                <button
+                    type="button"
+                    class="test-card-button"
+                >
+                    Start Test
+                </button>
+            `;
+
+            card.addEventListener(
+                "click",
+                function () {
+
+                    openTest(
+                        number
+                    );
+
+                }
+            );
+
+            box.appendChild(
+                card
+            );
+
+        }
+    );
 
 }
 
@@ -486,29 +514,27 @@ async function renderTestCards() {
    OPEN TEST
 ========================================================= */
 
-async function openTest(testNumber) {
+async function openTest(
+    testNumber
+) {
 
-    setLoading(
-        true,
-        "Loading test..."
+    showLoading(
+        "Loading IELTS Reading Test..."
     );
-
 
     try {
 
         const url =
-            `${CONFIG.TEST_FOLDER}Test${testNumber}.json?cache=${Date.now()}`;
-
+            `${CONFIG.TEST_FOLDER}Test${testNumber}.json?${Date.now()}`;
 
         const response =
             await fetch(
                 url,
                 {
-                    method: "GET",
-                    cache: "no-store"
+                    cache:
+                        "no-store"
                 }
             );
-
 
         if (!response.ok) {
 
@@ -518,15 +544,12 @@ async function openTest(testNumber) {
 
         }
 
-
         const data =
             await response.json();
-
 
         validateTest(
             data
         );
-
 
         currentTest =
             data;
@@ -534,32 +557,17 @@ async function openTest(testNumber) {
         currentTestNumber =
             testNumber;
 
-
         currentPartIndex =
             0;
-
-
-        studentAnswers =
-            {};
-
-
-        submittedAnswers =
-            {};
-
-
-        scoreData =
-            null;
-
 
         testSubmitted =
             false;
 
+        studentAnswers = {};
 
         loadSavedAnswers();
 
-
         showTestIntroduction();
-
 
     } catch (error) {
 
@@ -568,18 +576,14 @@ async function openTest(testNumber) {
             error
         );
 
-
         showToast(
             error.message ||
             "Could not load test."
         );
 
-
     } finally {
 
-        setLoading(
-            false
-        );
+        hideLoading();
 
     }
 
@@ -590,32 +594,46 @@ async function openTest(testNumber) {
    VALIDATE TEST
 ========================================================= */
 
-function validateTest(test) {
+function validateTest(
+    test
+) {
 
     if (
         !test ||
-        !Array.isArray(test.parts) ||
+        !Array.isArray(
+            test.parts
+        ) ||
         !test.parts.length
     ) {
 
         throw new Error(
-            "Invalid test JSON: parts are missing."
+            "Invalid test JSON. The test must contain parts."
         );
 
     }
 
-
     test.parts.forEach(
-        function (part, index) {
+        function (part) {
 
             if (!part.passage) {
 
-                throw new Error(
-                    `Part ${index + 1} is missing passage.`
-                );
+                part.passage = {
+                    title: "",
+                    paragraphs: []
+                };
 
             }
 
+            if (
+                !Array.isArray(
+                    part.passage.paragraphs
+                )
+            ) {
+
+                part.passage.paragraphs =
+                    [];
+
+            }
 
             if (
                 !Array.isArray(
@@ -627,7 +645,6 @@ function validateTest(test) {
                     [];
 
             }
-
 
             part.questionGroups.forEach(
                 function (group) {
@@ -642,7 +659,6 @@ function validateTest(test) {
                             [];
 
                     }
-
 
                     if (
                         !Array.isArray(
@@ -674,13 +690,11 @@ function showTestIntroduction() {
         "introScreen"
     );
 
-
     setText(
         "introTestNumber",
         currentTest.testId ||
         `Test ${currentTestNumber}`
     );
-
 
     setText(
         "introTitle",
@@ -688,18 +702,15 @@ function showTestIntroduction() {
         `IELTS Reading Test ${currentTestNumber}`
     );
 
-
     setText(
         "introDuration",
         `${currentTest.duration || CONFIG.DEFAULT_DURATION} minutes`
     );
 
-
     setText(
         "introQuestions",
         countTotalQuestions()
     );
-
 
     setText(
         "introParts",
@@ -719,19 +730,15 @@ function startTest() {
         return;
     }
 
-
     /*
-     * Keep saved answers.
+     * Keep previously saved local answers.
      */
-
     studentAnswers = {};
 
     loadSavedAnswers();
 
-
     currentPartIndex =
         0;
-
 
     testStarted =
         true;
@@ -739,10 +746,8 @@ function startTest() {
     testSubmitted =
         false;
 
-
     testStartTime =
         Date.now();
-
 
     remainingSeconds =
         (
@@ -752,18 +757,14 @@ function startTest() {
             CONFIG.DEFAULT_DURATION
         ) * 60;
 
-
     testElapsedSeconds =
         0;
-
 
     showScreen(
         "testScreen"
     );
 
-
     renderCurrentPart();
-
 
     startTimer();
 
@@ -780,7 +781,6 @@ function startTimer() {
 
     updateTimerDisplay();
 
-
     timerInterval =
         setInterval(
             function () {
@@ -789,9 +789,9 @@ function startTimer() {
 
                 updateTimerDisplay();
 
-
                 if (
-                    remainingSeconds <= 0
+                    remainingSeconds <=
+                    0
                 ) {
 
                     remainingSeconds =
@@ -829,13 +829,10 @@ function stopTimer() {
 function updateTimerDisplay() {
 
     const ids = [
-
         "timer",
         "timerDisplay",
         "testTimer"
-
     ];
-
 
     for (
         const id of ids
@@ -846,17 +843,44 @@ function updateTimerDisplay() {
                 id
             );
 
+        if (!element) {
+            continue;
+        }
 
-        if (element) {
+        element.textContent =
+            formatTime(
+                remainingSeconds
+            );
 
-            element.textContent =
-                formatTime(
-                    remainingSeconds
-                );
+        /*
+         * Optional warning classes.
+         */
+        element.classList.remove(
+            "timer-warning",
+            "timer-danger"
+        );
 
-            break;
+        if (
+            remainingSeconds <=
+            300
+        ) {
+
+            element.classList.add(
+                "timer-danger"
+            );
+
+        } else if (
+            remainingSeconds <=
+            600
+        ) {
+
+            element.classList.add(
+                "timer-warning"
+            );
 
         }
+
+        break;
 
     }
 
@@ -873,24 +897,20 @@ function renderCurrentPart() {
         return;
     }
 
-
     const part =
         currentTest.parts[
             currentPartIndex
         ];
 
-
     if (!part) {
         return;
     }
-
 
     setText(
         "testHeaderTitle",
         currentTest.title ||
         `IELTS Reading Test ${currentTestNumber}`
     );
-
 
     setText(
         "testHeaderPart",
@@ -900,7 +920,6 @@ function renderCurrentPart() {
         }`
     );
 
-
     setText(
         "passagePartLabel",
         `Part ${
@@ -909,19 +928,16 @@ function renderCurrentPart() {
         }`
     );
 
-
     setText(
         "passageTitle",
         part.passage.title ||
         ""
     );
 
-
     setText(
         "questionsPartLabel",
         `Questions ${questionRangeForPart(part)}`
     );
-
 
     setText(
         "partIndicator",
@@ -932,22 +948,17 @@ function renderCurrentPart() {
         }`
     );
 
-
     renderPassage(
         part.passage
     );
-
 
     renderQuestions(
         part
     );
 
-
     renderQuestionNavigator();
 
-
     updatePartButtons();
-
 
     scrollTestPanelsToTop();
 
@@ -956,13 +967,13 @@ function renderCurrentPart() {
 
 /* =========================================================
    QUESTION RANGE
-   Includes group.questions AND group.blanks.
 ========================================================= */
 
-function questionRangeForPart(part) {
+function questionRangeForPart(
+    part
+) {
 
     const numbers = [];
-
 
     (
         part.questionGroups ||
@@ -981,7 +992,6 @@ function questionRangeForPart(part) {
                             question.number
                         );
 
-
                     if (
                         Number.isFinite(
                             number
@@ -997,7 +1007,6 @@ function questionRangeForPart(part) {
                 }
             );
 
-
             (
                 group.blanks ||
                 []
@@ -1008,7 +1017,6 @@ function questionRangeForPart(part) {
                         Number(
                             blank.number
                         );
-
 
                     if (
                         Number.isFinite(
@@ -1028,11 +1036,9 @@ function questionRangeForPart(part) {
         }
     );
 
-
     if (!numbers.length) {
         return "";
     }
-
 
     return `${Math.min(...numbers)}-${Math.max(...numbers)}`;
 
@@ -1043,23 +1049,25 @@ function questionRangeForPart(part) {
    PASSAGE
 ========================================================= */
 
-function renderPassage(passage) {
+function renderPassage(
+    passage
+) {
 
     const box =
         document.getElementById(
             "passageContent"
         );
 
-
     if (!box) {
         return;
     }
 
-
     const paragraphs =
-        passage.paragraphs ||
-        [];
-
+        Array.isArray(
+            passage.paragraphs
+        )
+            ? passage.paragraphs
+            : [];
 
     box.innerHTML =
         paragraphs
@@ -1067,17 +1075,19 @@ function renderPassage(passage) {
                 function (paragraph) {
 
                     return `
-
                         <p class="passage-paragraph">
 
-                            <span class="paragraph-label">
-
-                                ${escapeHTML(
-                                    paragraph.id ||
-                                    ""
-                                )}
-
-                            </span>
+                            ${
+                                paragraph.id
+                                    ? `
+                                        <span class="paragraph-label">
+                                            ${escapeHTML(
+                                                paragraph.id
+                                            )}
+                                        </span>
+                                      `
+                                    : ""
+                            }
 
                             ${highlightVocabulary(
                                 paragraph.text ||
@@ -1085,13 +1095,11 @@ function renderPassage(passage) {
                             )}
 
                         </p>
-
                     `;
 
                 }
             )
             .join("");
-
 
     box
         .querySelectorAll(
@@ -1107,7 +1115,8 @@ function renderPassage(passage) {
                         event.stopPropagation();
 
                         showVocabularyPopup(
-                            element.dataset.word
+                            element.dataset.word,
+                            element
                         );
 
                     }
@@ -1120,264 +1129,29 @@ function renderPassage(passage) {
 
 
 /* =========================================================
-   VOCABULARY
+   QUESTIONS
 ========================================================= */
 
-async function loadVocabulary() {
-
-    vocabulary = {};
-
-
-    try {
-
-        const response =
-            await fetch(
-                `${CONFIG.VOCABULARY_FILE}?cache=${Date.now()}`,
-                {
-                    method: "GET",
-                    cache: "no-store"
-                }
-            );
-
-
-        if (!response.ok) {
-            return;
-        }
-
-
-        const data =
-            await response.json();
-
-
-        vocabulary =
-            data.words ||
-            data ||
-            {};
-
-
-    } catch (error) {
-
-        /*
-         * Vocabulary is optional.
-         *
-         * Do NOT stop the website if the file
-         * does not exist.
-         */
-
-        vocabulary = {};
-
-    }
-
-}
-
-
-/* =========================================================
-   VOCABULARY HIGHLIGHT
-========================================================= */
-
-function highlightVocabulary(text) {
-
-    if (
-        !vocabulary ||
-        !Object.keys(vocabulary).length
-    ) {
-
-        return escapeHTML(
-            text
-        );
-
-    }
-
-
-    let result =
-        escapeHTML(
-            text
-        );
-
-
-    const words =
-        Object.keys(
-            vocabulary
-        )
-        .sort(
-            function (a, b) {
-
-                return (
-                    b.length -
-                    a.length
-                );
-
-            }
-        );
-
-
-    words.forEach(
-        function (word) {
-
-            try {
-
-                const regex =
-                    new RegExp(
-                        `(^|[^A-Za-z])(${escapeRegExp(word)})(?![A-Za-z])`,
-                        "gi"
-                    );
-
-
-                result =
-                    result.replace(
-                        regex,
-                        function (
-                            match,
-                            before,
-                            actual
-                        ) {
-
-                            return `
-                                ${before}
-                                <span
-                                    class="vocabulary-word"
-                                    data-word="${escapeAttribute(actual)}"
-                                >
-                                    ${actual}
-                                </span>
-                            `;
-
-                        }
-                    );
-
-            } catch (error) {
-
-                /*
-                 * Ignore invalid vocabulary entries.
-                 */
-
-            }
-
-        }
-    );
-
-
-    return result;
-
-}
-
-
-/* =========================================================
-   VOCABULARY POPUP
-========================================================= */
-
-function showVocabularyPopup(word) {
-
-    if (
-        !vocabulary ||
-        !Object.keys(vocabulary).length
-    ) {
-        return;
-    }
-
-
-    const key =
-        Object.keys(
-            vocabulary
-        )
-        .find(
-            function (item) {
-
-                return (
-                    item.toLowerCase() ===
-                    String(
-                        word
-                    ).toLowerCase()
-                );
-
-            }
-        );
-
-
-    if (!key) {
-        return;
-    }
-
-
-    const item =
-        vocabulary[key] ||
-        {};
-
-
-    const popup =
-        document.getElementById(
-            "vocabularyPopup"
-        );
-
-
-    if (!popup) {
-        return;
-    }
-
-
-    setText(
-        "vocabularyWord",
-        word
-    );
-
-
-    setText(
-        "vocabularyMeaning",
-        item.meaning ||
-        "Meaning not available."
-    );
-
-
-    setText(
-        "vocabularySimpleMeaning",
-        item.simpleMeaning ||
-        ""
-    );
-
-
-    popup.style.display =
-        "block";
-
-}
-
-
-function closeVocabularyPopup() {
-
-    const popup =
-        document.getElementById(
-            "vocabularyPopup"
-        );
-
-
-    if (popup) {
-
-        popup.style.display =
-            "none";
-
-    }
-
-}
-
-
-/* =========================================================
-   RENDER QUESTIONS
-========================================================= */
-
-function renderQuestions(part) {
+function renderQuestions(
+    part
+) {
 
     const box =
         document.getElementById(
             "questionsContent"
+        ) ||
+        document.getElementById(
+            "questionsContainer"
+        ) ||
+        document.getElementById(
+            "questionContent"
         );
-
 
     if (!box) {
         return;
     }
 
-
     box.innerHTML = "";
-
 
     (
         part.questionGroups ||
@@ -1385,68 +1159,54 @@ function renderQuestions(part) {
     ).forEach(
         function (group) {
 
-            const wrapper =
+            const groupBox =
                 document.createElement(
-                    "div"
+                    "section"
                 );
 
-
-            wrapper.className =
+            groupBox.className =
                 "question-group";
 
+            /*
+             * Instructions.
+             */
+            if (
+                group.instructions
+            ) {
 
-            wrapper.innerHTML = `
+                const instruction =
+                    document.createElement(
+                        "div"
+                    );
 
-                ${
-                    group.questionRange
-                        ? `
-                            <h3 class="question-group-title">
-                                Questions ${escapeHTML(
-                                    group.questionRange
-                                )}
-                            </h3>
-                        `
-                        : ""
-                }
+                instruction.className =
+                    "question-instructions";
 
-                ${
-                    group.instructions
-                        ? `
-                            <p class="question-instructions">
-                                ${escapeHTML(
-                                    group.instructions
-                                )}
-                            </p>
-                        `
-                        : ""
-                }
+                instruction.innerHTML =
+                    escapeHTML(
+                        group.instructions
+                    );
 
-            `;
-
-
-            const content =
-                document.createElement(
-                    "div"
+                groupBox.appendChild(
+                    instruction
                 );
 
-
-            wrapper.appendChild(
-                content
-            );
-
+            }
 
             const type =
-                normalizeQuestionType(
-                    group.type
-                );
-
+                String(
+                    group.type ||
+                    ""
+                )
+                .trim()
+                .toLowerCase();
 
             switch (type) {
 
                 case "true_false_not_given":
 
                     renderTrueFalseNotGiven(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1456,7 +1216,7 @@ function renderQuestions(part) {
                 case "yes_no_not_given":
 
                     renderYesNoNotGiven(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1466,7 +1226,7 @@ function renderQuestions(part) {
                 case "fill_blank":
 
                     renderFillBlank(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1476,7 +1236,7 @@ function renderQuestions(part) {
                 case "summary_completion":
 
                     renderSummaryCompletion(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1486,7 +1246,7 @@ function renderQuestions(part) {
                 case "multiple_choice":
 
                     renderMultipleChoice(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1496,7 +1256,7 @@ function renderQuestions(part) {
                 case "multiple_choice_multiple":
 
                     renderMultipleChoiceMultiple(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1506,7 +1266,7 @@ function renderQuestions(part) {
                 case "matching_headings":
 
                     renderMatchingHeadings(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1516,7 +1276,7 @@ function renderQuestions(part) {
                 case "matching_information":
 
                     renderMatchingInformation(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1526,7 +1286,7 @@ function renderQuestions(part) {
                 case "matching_features":
 
                     renderMatchingFeatures(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1536,7 +1296,7 @@ function renderQuestions(part) {
                 case "answer_box":
 
                     renderAnswerBox(
-                        content,
+                        groupBox,
                         group
                     );
 
@@ -1545,8 +1305,11 @@ function renderQuestions(part) {
 
                 default:
 
-                    renderUnsupportedGroup(
-                        content,
+                    /*
+                     * Fallback.
+                     */
+                    renderGenericQuestions(
+                        groupBox,
                         group
                     );
 
@@ -1554,39 +1317,83 @@ function renderQuestions(part) {
 
             }
 
-
             box.appendChild(
-                wrapper
+                groupBox
             );
 
         }
     );
 
-
-    restoreAnswers();
-
 }
 
 
 /* =========================================================
-   NORMALIZE QUESTION TYPE
+   QUESTION ITEM
 ========================================================= */
 
-function normalizeQuestionType(type) {
+function createQuestionItem(
+    question
+) {
 
-    return String(
-        type || ""
-    )
-        .trim()
-        .toLowerCase()
-        .replace(
-            /-/g,
-            "_"
-        )
-        .replace(
-            /\s+/g,
-            "_"
+    const item =
+        document.createElement(
+            "div"
         );
+
+    item.className =
+        "question-item";
+
+    item.dataset.questionNumber =
+        question.number;
+
+    const number =
+        document.createElement(
+            "span"
+        );
+
+    number.className =
+        "question-number";
+
+    number.textContent =
+        `${question.number}.`;
+
+    const text =
+        document.createElement(
+            "span"
+        );
+
+    text.className =
+        "question-text";
+
+    text.innerHTML =
+        formatQuestionText(
+            question.question ||
+            question.text ||
+            question.prompt ||
+            ""
+        );
+
+    const control =
+        document.createElement(
+            "div"
+        );
+
+    control.className =
+        "question-control";
+
+    item.appendChild(
+        number
+    );
+
+    item.appendChild(
+        text
+    );
+
+    item.appendChild(
+        control
+    );
+
+    return item;
 
 }
 
@@ -1600,21 +1407,42 @@ function renderTrueFalseNotGiven(
     group
 ) {
 
+    const options = [
+        "TRUE",
+        "FALSE",
+        "NOT GIVEN"
+    ];
+
     (
         group.questions ||
         []
     ).forEach(
         function (question) {
 
-            box.appendChild(
+            const item =
                 createQuestionItem(
-                    question,
-                    [
-                        "TRUE",
-                        "FALSE",
-                        "NOT GIVEN"
-                    ]
-                )
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            control.innerHTML =
+                createSelectOptions(
+                    options
+                );
+
+            bindSelect(
+                control.querySelector(
+                    "select"
+                ),
+                question.number
+            );
+
+            box.appendChild(
+                item
             );
 
         }
@@ -1632,125 +1460,46 @@ function renderYesNoNotGiven(
     group
 ) {
 
+    const options = [
+        "YES",
+        "NO",
+        "NOT GIVEN"
+    ];
+
     (
         group.questions ||
         []
     ).forEach(
         function (question) {
 
-            box.appendChild(
+            const item =
                 createQuestionItem(
-                    question,
-                    [
-                        "YES",
-                        "NO",
-                        "NOT GIVEN"
-                    ]
-                )
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            control.innerHTML =
+                createSelectOptions(
+                    options
+                );
+
+            bindSelect(
+                control.querySelector(
+                    "select"
+                ),
+                question.number
+            );
+
+            box.appendChild(
+                item
             );
 
         }
     );
-
-}
-
-
-/* =========================================================
-   CREATE BASIC QUESTION
-========================================================= */
-
-function createQuestionItem(
-    question,
-    options
-) {
-
-    const item =
-        document.createElement(
-            "div"
-        );
-
-
-    item.className =
-        "question";
-
-
-    item.dataset.questionNumber =
-        question.number;
-
-
-    const questionText =
-        question.text ||
-        question.question ||
-        question.prompt ||
-        "";
-
-
-    item.innerHTML = `
-
-        <div class="question-main">
-
-            <div class="question-number">
-                ${escapeHTML(
-                    String(
-                        question.number
-                    )
-                )}
-            </div>
-
-            <div class="question-body">
-
-                <div class="question-text">
-                    ${escapeHTML(
-                        questionText
-                    )}
-                </div>
-
-                <div class="question-control"></div>
-
-            </div>
-
-        </div>
-
-    `;
-
-
-    const control =
-        item.querySelector(
-            ".question-control"
-        );
-
-
-    if (
-        Array.isArray(options) &&
-        options.length
-    ) {
-
-        control.innerHTML =
-            createRadioOptions(
-                question.number,
-                options
-            );
-
-
-        control
-            .querySelectorAll(
-                "input"
-            )
-            .forEach(
-                function (input) {
-
-                    input.addEventListener(
-                        "change",
-                        handleAnswerChange
-                    );
-
-                }
-            );
-
-    }
-
-
-    return item;
 
 }
 
@@ -1775,87 +1524,49 @@ function renderFillBlank(
                     question
                 );
 
-
             const control =
                 item.querySelector(
                     ".question-control"
                 );
 
-
-            control.innerHTML = `
-
-                <input
-                    type="text"
-                    class="answer-input"
-                    data-question-number="${question.number}"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="Type your answer"
-                >
-
-            `;
-
-
-            attachInputListener(
-                control
-            );
-
-
-            box.appendChild(
-                item
-            );
-
-        }
-    );
-
-}
-
-
-/* =========================================================
-   ANSWER BOX
-========================================================= */
-
-function renderAnswerBox(
-    box,
-    group
-) {
-
-    (
-        group.questions ||
-        []
-    ).forEach(
-        function (question) {
-
-            const item =
-                createQuestionItem(
-                    question
+            const input =
+                document.createElement(
+                    "input"
                 );
 
+            input.type =
+                "text";
 
-            const control =
-                item.querySelector(
-                    ".question-control"
-                );
+            input.className =
+                "answer-input";
 
+            input.placeholder =
+                "Your answer";
 
-            control.innerHTML = `
+            input.dataset.questionNumber =
+                question.number;
 
-                <input
-                    type="text"
-                    class="answer-input"
-                    data-question-number="${question.number}"
-                    autocomplete="off"
-                    spellcheck="false"
-                    placeholder="Type your answer"
-                >
+            input.value =
+                studentAnswers[
+                    question.number
+                ] ||
+                "";
 
-            `;
+            input.addEventListener(
+                "input",
+                function () {
 
+                    saveAnswer(
+                        question.number,
+                        input.value
+                    );
 
-            attachInputListener(
-                control
+                }
             );
 
+            control.appendChild(
+                input
+            );
 
             box.appendChild(
                 item
@@ -1876,461 +1587,189 @@ function renderSummaryCompletion(
     group
 ) {
 
-    const container =
-        document.createElement(
-            "div"
-        );
+    /*
+     * First render normal blanks if present.
+     */
+    if (
+        Array.isArray(
+            group.blanks
+        ) &&
+        group.blanks.length
+    ) {
 
-
-    container.className =
-        "drag-summary-container";
-
-
-    const blanks =
-        (
-            group.blanks &&
-            group.blanks.length
-        )
-            ? group.blanks
-            : (
-                group.questions ||
-                []
-            );
-
-
-    let options =
-        getQuestionOptions(
-            null,
+        renderSummaryBlanks(
+            box,
             group
         );
 
-
-    /*
-     * If no options exist,
-     * use the answers as fallback.
-     */
-
-    if (!options.length) {
-
-        options =
-            blanks
-                .map(
-                    function (blank) {
-
-                        return blank.answer;
-
-                    }
-                )
-                .filter(
-                    function (answer) {
-
-                        return (
-                            answer !==
-                            undefined &&
-                            answer !==
-                            null &&
-                            String(
-                                answer
-                            ).trim() !== ""
-                        );
-
-                    }
-                );
-
     }
 
-
-    options =
-        uniqueOptions(
-            options
-        );
-
-
     /*
-     * Word bank.
+     * Some JSON files may store them
+     * inside questions instead.
      */
-
-    const bank =
-        document.createElement(
-            "div"
-        );
-
-
-    bank.className =
-        "summary-word-bank";
-
-
-    bank.innerHTML = `
-
-        <div class="summary-word-bank-title">
-            Choose an answer
-        </div>
-
-        <div class="summary-word-options"></div>
-
-    `;
-
-
-    const bankOptions =
-        bank.querySelector(
-            ".summary-word-options"
-        );
-
-
-    options.forEach(
-        function (option) {
-
-            const value =
-                optionValue(
-                    option
-                );
-
-
-            const text =
-                optionText(
-                    option
-                );
-
-
-            const word =
-                document.createElement(
-                    "button"
-                );
-
-
-            word.type =
-                "button";
-
-
-            word.className =
-                "summary-drag-word";
-
-
-            word.dataset.value =
-                value;
-
-
-            word.dataset.text =
-                text;
-
-
-            word.textContent =
-                text;
-
-
-            word.addEventListener(
-                "click",
-                function () {
-
-                    selectedDragOption = {
-
-                        value: value,
-                        text: text
-
-                    };
-
-
-                    document
-                        .querySelectorAll(
-                            ".summary-drag-word"
-                        )
-                        .forEach(
-                            function (element) {
-
-                                element.classList.remove(
-                                    "selected"
-                                );
-
-                            }
-                        );
-
-
-                    word.classList.add(
-                        "selected"
-                    );
-
-                }
-            );
-
-
-            word.draggable =
-                true;
-
-
-            word.addEventListener(
-                "dragstart",
-                function (event) {
-
-                    event.dataTransfer.setData(
-                        "text/plain",
-                        JSON.stringify({
-
-                            value: value,
-                            text: text
-
-                        })
-                    );
-
-                }
-            );
-
-
-            bankOptions.appendChild(
-                word
-            );
-
-        }
-    );
-
-
-    container.appendChild(
-        bank
-    );
-
-
-    /*
-     * Summary text.
-     */
-
-    const summary =
-        document.createElement(
-            "div"
-        );
-
-
-    summary.className =
-        "summary-question";
-
-
-    let html =
-        group.summary ||
-        group.text ||
-        group.content ||
-        group.passage ||
-        "";
-
-
-    html =
-        escapeHTML(
-            html
-        );
-
-
-    /*
-     * Replace {{23}}, {23}, [23]
-     */
-
-    html =
-        html.replace(
-            /\{\{(\d+)\}\}|\{(\d+)\}|\[(\d+)\]/g,
-            function (
-                match,
-                a,
-                b,
-                c
-            ) {
-
-                const number =
-                    Number(
-                        a ||
-                        b ||
-                        c
-                    );
-
-
-                const exists =
-                    blanks.some(
+    if (
+        Array.isArray(
+            group.questions
+        ) &&
+        group.questions.length
+    ) {
+
+        group.questions.forEach(
+            function (question) {
+
+                /*
+                 * Avoid duplicate questions
+                 * if blanks were already rendered.
+                 */
+                if (
+                    group.blanks &&
+                    group.blanks.some(
                         function (blank) {
 
-                            return (
-                                Number(
-                                    blank.number
-                                ) ===
-                                number
+                            return String(
+                                blank.number
+                            ) ===
+                            String(
+                                question.number
                             );
 
                         }
-                    );
+                    )
+                ) {
 
+                    return;
 
-                if (!exists) {
-                    return match;
                 }
 
-
-                return createSummaryDropZone(
-                    number
-                );
-
-            }
-        );
-
-
-    /*
-     * Replace underscores.
-     */
-
-    let blankIndex =
-        0;
-
-
-    html =
-        html.replace(
-            /_{2,}/g,
-            function () {
-
-                const blank =
-                    blanks[
-                        blankIndex
-                    ];
-
-
-                blankIndex++;
-
-
-                if (!blank) {
-                    return "________";
-                }
-
-
-                return createSummaryDropZone(
-                    blank.number
-                );
-
-            }
-        );
-
-
-    summary.innerHTML =
-        html;
-
-
-    container.appendChild(
-        summary
-    );
-
-
-    /*
-     * If no zones exist,
-     * show fallback rows.
-     */
-
-    const zones =
-        summary.querySelectorAll(
-            ".summary-drop-zone"
-        );
-
-
-    if (
-        zones.length === 0 &&
-        blanks.length
-    ) {
-
-        const fallback =
-            document.createElement(
-                "div"
-            );
-
-
-        fallback.className =
-            "summary-fallback";
-
-
-        blanks.forEach(
-            function (blank) {
-
-                const row =
-                    document.createElement(
-                        "div"
+                const item =
+                    createQuestionItem(
+                        question
                     );
 
+                const control =
+                    item.querySelector(
+                        ".question-control"
+                    );
 
-                row.className =
-                    "summary-fallback-row";
+                control.innerHTML =
+                    createSelectOptions(
+                        getGroupOptions(
+                            group
+                        )
+                    );
 
+                bindSelect(
+                    control.querySelector(
+                        "select"
+                    ),
+                    question.number
+                );
 
-                row.innerHTML = `
-
-                    <strong>
-                        ${blank.number}.
-                    </strong>
-
-                    ${createSummaryDropZone(
-                        blank.number
-                    )}
-
-                `;
-
-
-                fallback.appendChild(
-                    row
+                box.appendChild(
+                    item
                 );
 
             }
-        );
-
-
-        container.appendChild(
-            fallback
         );
 
     }
-
-
-    box.appendChild(
-        container
-    );
-
-
-    /*
-     * Setup zones.
-     */
-
-    container
-        .querySelectorAll(
-            ".summary-drop-zone"
-        )
-        .forEach(
-            function (zone) {
-
-                setupDropZone(
-                    zone,
-                    Number(
-                        zone.dataset.questionNumber
-                    )
-                );
-
-            }
-        );
-
-
-    restoreDragDropAnswers();
 
 }
 
 
 /* =========================================================
-   CREATE SUMMARY DROP ZONE
+   SUMMARY BLANKS
 ========================================================= */
 
-function createSummaryDropZone(
-    questionNumber
+function renderSummaryBlanks(
+    box,
+    group
 ) {
 
-    return `
+    const options =
+        getGroupOptions(
+            group
+        );
 
-        <span
-            class="summary-drop-zone"
-            data-question-number="${questionNumber}"
-        >
+    (
+        group.blanks ||
+        []
+    ).forEach(
+        function (blank) {
 
-            <span class="summary-drop-placeholder">
-                Select
-            </span>
+            const item =
+                createQuestionItem(
+                    blank
+                );
 
-        </span>
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
 
-    `;
+            if (
+                options.length
+            ) {
+
+                control.innerHTML =
+                    createSelectOptions(
+                        options
+                    );
+
+                bindSelect(
+                    control.querySelector(
+                        "select"
+                    ),
+                    blank.number
+                );
+
+            } else {
+
+                const input =
+                    document.createElement(
+                        "input"
+                    );
+
+                input.type =
+                    "text";
+
+                input.className =
+                    "answer-input";
+
+                input.placeholder =
+                    "Your answer";
+
+                input.value =
+                    studentAnswers[
+                        blank.number
+                    ] ||
+                    "";
+
+                input.addEventListener(
+                    "input",
+                    function () {
+
+                        saveAnswer(
+                            blank.number,
+                            input.value
+                        );
+
+                    }
+                );
+
+                control.appendChild(
+                    input
+                );
+
+            }
+
+            box.appendChild(
+                item
+            );
+
+        }
+    );
 
 }
 
@@ -2355,44 +1794,27 @@ function renderMultipleChoice(
                     question
                 );
 
-
             const control =
                 item.querySelector(
                     ".question-control"
                 );
 
-
             const options =
-                question.options ||
-                group.options ||
-                [];
-
+                getGroupOptions(
+                    group,
+                    question
+                );
 
             control.innerHTML =
-                createSelectOptions(
-                    options
+                createRadioOptions(
+                    options,
+                    question.number
                 );
 
-
-            const select =
-                control.querySelector(
-                    "select"
-                );
-
-
-            if (select) {
-
-                select.dataset.questionNumber =
-                    question.number;
-
-
-                select.addEventListener(
-                    "change",
-                    handleAnswerChange
-                );
-
-            }
-
+            bindRadioGroup(
+                control,
+                question.number
+            );
 
             box.appendChild(
                 item
@@ -2424,49 +1846,27 @@ function renderMultipleChoiceMultiple(
                     question
                 );
 
-
             const control =
                 item.querySelector(
                     ".question-control"
                 );
 
-
             const options =
-                question.options ||
-                group.options ||
-                [];
-
-
-            /*
-             * If the JSON has "answersRequired",
-             * display a select for the question.
-             */
+                getGroupOptions(
+                    group,
+                    question
+                );
 
             control.innerHTML =
-                createSelectOptions(
-                    options
+                createCheckboxOptions(
+                    options,
+                    question.number
                 );
 
-
-            const select =
-                control.querySelector(
-                    "select"
-                );
-
-
-            if (select) {
-
-                select.dataset.questionNumber =
-                    question.number;
-
-
-                select.addEventListener(
-                    "change",
-                    handleAnswerChange
-                );
-
-            }
-
+            bindCheckboxGroup(
+                control,
+                question.number
+            );
 
             box.appendChild(
                 item
@@ -2488,15 +1888,43 @@ function renderMatchingHeadings(
 ) {
 
     const options =
-        group.options ||
-        group.headings ||
-        [];
+        getGroupOptions(
+            group
+        );
 
+    (
+        group.questions ||
+        []
+    ).forEach(
+        function (question) {
 
-    renderMatchingSelects(
-        box,
-        group,
-        options
+            const item =
+                createQuestionItem(
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            control.innerHTML =
+                createSelectOptions(
+                    options
+                );
+
+            bindSelect(
+                control.querySelector(
+                    "select"
+                ),
+                question.number
+            );
+
+            box.appendChild(
+                item
+            );
+
+        }
     );
 
 }
@@ -2504,6 +1932,43 @@ function renderMatchingHeadings(
 
 /* =========================================================
    MATCHING INFORMATION
+   ---------------------------------------------------------
+   IMPORTANT FIX
+   ---------------------------------------------------------
+   Matching Information groups often look like:
+
+   {
+       "type": "matching_information",
+       "questions": [...]
+   }
+
+   They DO NOT always have:
+
+       "options": [...]
+
+   Instead the choices are the paragraph IDs:
+
+       A
+       B
+       C
+       D
+       E
+       F
+
+   or:
+
+       A
+       B
+       C
+       D
+       E
+       F
+       G
+
+   We therefore get the options directly from:
+
+   currentTest.parts[currentPartIndex]
+       .passage.paragraphs[].id
 ========================================================= */
 
 function renderMatchingInformation(
@@ -2511,17 +1976,195 @@ function renderMatchingInformation(
     group
 ) {
 
-    const options =
-        group.options ||
-        group.letters ||
-        group.paragraphs ||
-        [];
+    let options = [];
 
+    /*
+     * First:
+     * use explicitly supplied options
+     * if the JSON has them.
+     */
+    if (
+        Array.isArray(
+            group.options
+        ) &&
+        group.options.length
+    ) {
 
-    renderMatchingSelects(
-        box,
-        group,
-        options
+        options =
+            normalizeOptionList(
+                group.options
+            );
+
+    }
+
+    /*
+     * SECOND:
+     * derive options from passage paragraphs.
+     *
+     * THIS IS THE IMPORTANT FIX.
+     */
+    if (
+        !options.length
+    ) {
+
+        const part =
+            currentTest &&
+            Array.isArray(
+                currentTest.parts
+            )
+                ? currentTest.parts[
+                    currentPartIndex
+                ]
+                : null;
+
+        const paragraphs =
+            part &&
+            part.passage &&
+            Array.isArray(
+                part.passage.paragraphs
+            )
+                ? part.passage.paragraphs
+                : [];
+
+        options =
+            paragraphs
+                .map(
+                    function (paragraph) {
+
+                        if (
+                            paragraph &&
+                            paragraph.id
+                        ) {
+
+                            return String(
+                                paragraph.id
+                            )
+                            .trim()
+                            .toUpperCase();
+
+                        }
+
+                        return "";
+
+                    }
+                )
+                .filter(
+                    function (value) {
+
+                        return (
+                            value !== ""
+                        );
+
+                    }
+                );
+
+    }
+
+    /*
+     * THIRD:
+     * if there are still no paragraph IDs,
+     * use A-F as safe fallback.
+     */
+    if (
+        !options.length
+    ) {
+
+        options = [
+            "A",
+            "B",
+            "C",
+            "D",
+            "E",
+            "F"
+        ];
+
+    }
+
+    /*
+     * Remove duplicate letters.
+     */
+    options =
+        [...new Set(
+            options
+        )];
+
+    /*
+     * Render each question.
+     */
+    (
+        group.questions ||
+        []
+    ).forEach(
+        function (question) {
+
+            const item =
+                createQuestionItem(
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            /*
+             * The dropdown now contains:
+             *
+             * Select an answer
+             * A
+             * B
+             * C
+             * D
+             * E
+             * F
+             *
+             * or A-G.
+             */
+            control.innerHTML =
+                createSelectOptions(
+                    options
+                );
+
+            const select =
+                control.querySelector(
+                    "select"
+                );
+
+            if (select) {
+
+                select.dataset.questionNumber =
+                    question.number;
+
+                select.name =
+                    `question_${question.number}`;
+
+                select.value =
+                    studentAnswers[
+                        question.number
+                    ] ||
+                    "";
+
+                select.addEventListener(
+                    "change",
+                    function (event) {
+
+                        saveAnswer(
+                            question.number,
+                            event.target.value
+                        );
+
+                        updateQuestionNavigator();
+
+                    }
+                );
+
+            }
+
+            box.appendChild(
+                item
+            );
+
+        }
     );
 
 }
@@ -2537,15 +2180,291 @@ function renderMatchingFeatures(
 ) {
 
     const options =
-        group.options ||
-        group.features ||
-        group.people ||
-        [];
+        getGroupOptions(
+            group
+        );
+
+    (
+        group.questions ||
+        []
+    ).forEach(
+        function (question) {
+
+            const item =
+                createQuestionItem(
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            control.innerHTML =
+                createSelectOptions(
+                    options
+                );
+
+            bindSelect(
+                control.querySelector(
+                    "select"
+                ),
+                question.number
+            );
+
+            box.appendChild(
+                item
+            );
+
+        }
+    );
+
+}
 
 
-    renderMatchingSelects(
-        box,
-        group,
+/* =========================================================
+   ANSWER BOX
+========================================================= */
+
+function renderAnswerBox(
+    box,
+    group
+) {
+
+    (
+        group.questions ||
+        []
+    ).forEach(
+        function (question) {
+
+            const item =
+                createQuestionItem(
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            const input =
+                document.createElement(
+                    "input"
+                );
+
+            input.type =
+                "text";
+
+            input.className =
+                "answer-input";
+
+            input.placeholder =
+                "Your answer";
+
+            input.value =
+                studentAnswers[
+                    question.number
+                ] ||
+                "";
+
+            input.dataset.questionNumber =
+                question.number;
+
+            input.addEventListener(
+                "input",
+                function () {
+
+                    saveAnswer(
+                        question.number,
+                        input.value
+                    );
+
+                }
+            );
+
+            control.appendChild(
+                input
+            );
+
+            box.appendChild(
+                item
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   GENERIC QUESTIONS
+========================================================= */
+
+function renderGenericQuestions(
+    box,
+    group
+) {
+
+    (
+        group.questions ||
+        []
+    ).forEach(
+        function (question) {
+
+            const item =
+                createQuestionItem(
+                    question
+                );
+
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
+
+            const options =
+                getGroupOptions(
+                    group,
+                    question
+                );
+
+            if (
+                options.length
+            ) {
+
+                control.innerHTML =
+                    createSelectOptions(
+                        options
+                    );
+
+                bindSelect(
+                    control.querySelector(
+                        "select"
+                    ),
+                    question.number
+                );
+
+            } else {
+
+                const input =
+                    document.createElement(
+                        "input"
+                    );
+
+                input.type =
+                    "text";
+
+                input.className =
+                    "answer-input";
+
+                input.placeholder =
+                    "Your answer";
+
+                input.value =
+                    studentAnswers[
+                        question.number
+                    ] ||
+                    "";
+
+                input.addEventListener(
+                    "input",
+                    function () {
+
+                        saveAnswer(
+                            question.number,
+                            input.value
+                        );
+
+                    }
+                );
+
+                control.appendChild(
+                    input
+                );
+
+            }
+
+            box.appendChild(
+                item
+            );
+
+        }
+    );
+
+}
+
+
+/* =========================================================
+   GET GROUP OPTIONS
+========================================================= */
+
+function getGroupOptions(
+    group,
+    question = null
+) {
+
+    let options = [];
+
+    /*
+     * group.options
+     */
+    if (
+        Array.isArray(
+            group.options
+        )
+    ) {
+
+        options =
+            group.options;
+
+    }
+
+    /*
+     * group.choices
+     */
+    if (
+        !options.length &&
+        Array.isArray(
+            group.choices
+        )
+    ) {
+
+        options =
+            group.choices;
+
+    }
+
+    /*
+     * question.options
+     */
+    if (
+        !options.length &&
+        question &&
+        Array.isArray(
+            question.options
+        )
+    ) {
+
+        options =
+            question.options;
+
+    }
+
+    /*
+     * group.letters
+     */
+    if (
+        !options.length &&
+        Array.isArray(
+            group.letters
+        )
+    ) {
+
+        options =
+            group.letters;
+
+    }
+
+    return normalizeOptionList(
         options
     );
 
@@ -2553,125 +2472,150 @@ function renderMatchingFeatures(
 
 
 /* =========================================================
-   MATCHING SELECTS
+   NORMALIZE OPTIONS
 ========================================================= */
 
-function renderMatchingSelects(
-    box,
-    group,
+function normalizeOptionList(
     options
 ) {
 
-    (
-        group.questions ||
-        []
-    ).forEach(
-        function (question) {
+    if (
+        !Array.isArray(
+            options
+        )
+    ) {
 
-            const item =
-                createQuestionItem(
-                    question
-                );
+        return [];
 
+    }
 
-            const control =
-                item.querySelector(
-                    ".question-control"
-                );
+    return options
+        .map(
+            function (option) {
 
+                if (
+                    option &&
+                    typeof option ===
+                    "object"
+                ) {
 
-            control.innerHTML =
-                createSelectOptions(
-                    options
-                );
+                    return String(
+                        option.letter ??
+                        option.id ??
+                        option.value ??
+                        option.key ??
+                        option.answer ??
+                        option.text ??
+                        ""
+                    ).trim();
 
+                }
 
-            const select =
-                control.querySelector(
-                    "select"
-                );
+                return String(
+                    option ??
+                    ""
+                ).trim();
 
+            }
+        )
+        .filter(
+            function (value) {
 
-            if (select) {
-
-                select.dataset.questionNumber =
-                    question.number;
-
-
-                select.addEventListener(
-                    "change",
-                    handleAnswerChange
+                return (
+                    value !== ""
                 );
 
             }
-
-
-            box.appendChild(
-                item
-            );
-
-        }
-    );
+        );
 
 }
 
 
 /* =========================================================
-   UNSUPPORTED GROUP
+   CREATE SELECT OPTIONS
 ========================================================= */
 
-function renderUnsupportedGroup(
-    box,
-    group
+function createSelectOptions(
+    options
 ) {
 
-    console.warn(
-        "Unsupported question type:",
-        group.type
-    );
-
+    let html = `
+        <select
+            class="answer-select"
+            aria-label="Select answer"
+        >
+            <option value="">
+                Select an answer
+            </option>
+    `;
 
     (
-        group.questions ||
+        options ||
         []
     ).forEach(
-        function (question) {
+        function (option) {
 
-            const item =
-                createQuestionItem(
-                    question
-                );
+            let value = "";
+            let text = "";
 
+            if (
+                option &&
+                typeof option ===
+                "object"
+            ) {
 
-            const control =
-                item.querySelector(
-                    ".question-control"
-                );
+                value =
+                    String(
+                        option.letter ??
+                        option.id ??
+                        option.value ??
+                        option.key ??
+                        ""
+                    );
 
+                text =
+                    String(
+                        option.text ??
+                        option.label ??
+                        option.letter ??
+                        option.id ??
+                        option.value ??
+                        option.key ??
+                        ""
+                    );
 
-            control.innerHTML = `
+            } else {
 
-                <input
-                    type="text"
-                    class="answer-input"
-                    data-question-number="${question.number}"
-                    placeholder="Answer"
+                value =
+                    String(
+                        option ??
+                        ""
+                    );
+
+                text =
+                    String(
+                        option ??
+                        ""
+                    );
+
+            }
+
+            html += `
+                <option
+                    value="${escapeAttribute(value)}"
                 >
-
+                    ${escapeHTML(text)}
+                </option>
             `;
-
-
-            attachInputListener(
-                control
-            );
-
-
-            box.appendChild(
-                item
-            );
 
         }
     );
+
+    html += `
+        </select>
+    `;
+
+    return html;
 
 }
 
@@ -2681,150 +2625,324 @@ function renderUnsupportedGroup(
 ========================================================= */
 
 function createRadioOptions(
-    questionNumber,
-    options
+    options,
+    questionNumber
 ) {
 
-    if (!options.length) {
-        return "";
-    }
+    const selected =
+        studentAnswers[
+            questionNumber
+        ];
 
+    return (
+        options ||
+        []
+    )
+    .map(
+        function (option, index) {
 
-    return `
+            const value =
+                getOptionValue(
+                    option
+                );
 
-        <div class="radio-options">
+            const label =
+                getOptionLabel(
+                    option
+                );
 
-            ${options
-                .map(
-                    function (option, index) {
+            return `
+                <label
+                    class="choice-option"
+                >
+                    <input
+                        type="radio"
+                        name="question_${questionNumber}"
+                        value="${escapeAttribute(value)}"
+                        ${
+                            answersMatch(
+                                selected,
+                                value
+                            )
+                                ? "checked"
+                                : ""
+                        }
+                    >
 
-                        const value =
-                            optionValue(
-                                option
-                            );
+                    <span class="choice-letter">
+                        ${String.fromCharCode(
+                            65 + index
+                        )}
+                    </span>
 
+                    <span>
+                        ${escapeHTML(
+                            label
+                        )}
+                    </span>
+                </label>
+            `;
 
-                        const text =
-                            optionText(
-                                option
-                            );
-
-
-                        return `
-
-                            <label class="radio-option">
-
-                                <input
-                                    type="radio"
-                                    name="question_${questionNumber}"
-                                    value="${escapeAttribute(value)}"
-                                    data-question-number="${questionNumber}"
-                                >
-
-                                <span>
-                                    ${escapeHTML(text)}
-                                </span>
-
-                            </label>
-
-                        `;
-
-                    }
-                )
-                .join("")}
-
-        </div>
-
-    `;
+        }
+    )
+    .join("");
 
 }
 
 
 /* =========================================================
-   CREATE SELECT
+   CREATE CHECKBOX OPTIONS
 ========================================================= */
 
-function createSelectOptions(
-    options
+function createCheckboxOptions(
+    options,
+    questionNumber
 ) {
 
-    let html = `
+    let selected =
+        studentAnswers[
+            questionNumber
+        ];
 
-        <select class="answer-select">
+    if (
+        typeof selected ===
+        "string"
+    ) {
 
-            <option value="">
-                Select an answer
-            </option>
+        selected =
+            selected
+                .split(",")
+                .map(
+                    function (value) {
+                        return value.trim();
+                    }
+                )
+                .filter(Boolean);
 
-    `;
+    }
 
+    if (
+        !Array.isArray(
+            selected
+        )
+    ) {
 
-    (
+        selected = [];
+
+    }
+
+    return (
         options ||
         []
-    ).forEach(
-        function (option) {
+    )
+    .map(
+        function (option, index) {
 
             const value =
-                optionValue(
+                getOptionValue(
                     option
                 );
 
-
-            const text =
-                optionText(
+            const label =
+                getOptionLabel(
                     option
                 );
 
+            const checked =
+                selected.some(
+                    function (answer) {
 
-            html += `
+                        return answersMatch(
+                            answer,
+                            value
+                        );
 
-                <option value="${escapeAttribute(value)}">
+                    }
+                );
 
-                    ${escapeHTML(text)}
+            return `
+                <label
+                    class="choice-option"
+                >
+                    <input
+                        type="checkbox"
+                        name="question_${questionNumber}"
+                        value="${escapeAttribute(value)}"
+                        ${checked ? "checked" : ""}
+                    >
 
-                </option>
+                    <span class="choice-letter">
+                        ${String.fromCharCode(
+                            65 + index
+                        )}
+                    </span>
 
+                    <span>
+                        ${escapeHTML(
+                            label
+                        )}
+                    </span>
+                </label>
             `;
+
+        }
+    )
+    .join("");
+
+}
+
+
+/* =========================================================
+   BIND SELECT
+========================================================= */
+
+function bindSelect(
+    select,
+    questionNumber
+) {
+
+    if (!select) {
+        return;
+    }
+
+    select.dataset.questionNumber =
+        questionNumber;
+
+    select.name =
+        `question_${questionNumber}`;
+
+    select.value =
+        studentAnswers[
+            questionNumber
+        ] ||
+        "";
+
+    select.addEventListener(
+        "change",
+        function (event) {
+
+            saveAnswer(
+                questionNumber,
+                event.target.value
+            );
+
+            updateQuestionNavigator();
 
         }
     );
 
-
-    html += `
-
-        </select>
-
-    `;
+}
 
 
-    return html;
+/* =========================================================
+   BIND RADIO
+========================================================= */
+
+function bindRadioGroup(
+    control,
+    questionNumber
+) {
+
+    control
+        .querySelectorAll(
+            'input[type="radio"]'
+        )
+        .forEach(
+            function (input) {
+
+                input.addEventListener(
+                    "change",
+                    function () {
+
+                        saveAnswer(
+                            questionNumber,
+                            input.value
+                        );
+
+                        updateQuestionNavigator();
+
+                    }
+                );
+
+            }
+        );
 
 }
 
 
 /* =========================================================
-   OPTION VALUE
+   BIND CHECKBOX
 ========================================================= */
 
-function optionValue(option) {
+function bindCheckboxGroup(
+    control,
+    questionNumber
+) {
+
+    control
+        .querySelectorAll(
+            'input[type="checkbox"]'
+        )
+        .forEach(
+            function (input) {
+
+                input.addEventListener(
+                    "change",
+                    function () {
+
+                        const values =
+                            Array.from(
+                                control.querySelectorAll(
+                                    'input[type="checkbox"]:checked'
+                                )
+                            )
+                            .map(
+                                function (item) {
+                                    return item.value;
+                                }
+                            );
+
+                        saveAnswer(
+                            questionNumber,
+                            values
+                        );
+
+                        updateQuestionNavigator();
+
+                    }
+                );
+
+            }
+        );
+
+}
+
+
+/* =========================================================
+   GET OPTION VALUE
+========================================================= */
+
+function getOptionValue(
+    option
+) {
 
     if (
         option &&
-        typeof option === "object"
+        typeof option ===
+        "object"
     ) {
 
         return String(
             option.value ??
-            option.id ??
             option.letter ??
+            option.id ??
             option.key ??
+            option.answer ??
             option.text ??
             ""
         );
 
     }
-
 
     return String(
         option ??
@@ -2835,27 +2953,30 @@ function optionValue(option) {
 
 
 /* =========================================================
-   OPTION TEXT
+   GET OPTION LABEL
 ========================================================= */
 
-function optionText(option) {
+function getOptionLabel(
+    option
+) {
 
     if (
         option &&
-        typeof option === "object"
+        typeof option ===
+        "object"
     ) {
 
         return String(
             option.text ??
             option.label ??
-            option.title ??
             option.value ??
+            option.letter ??
             option.id ??
+            option.key ??
             ""
         );
 
     }
-
 
     return String(
         option ??
@@ -2866,745 +2987,139 @@ function optionText(option) {
 
 
 /* =========================================================
-   GET QUESTION OPTIONS
+   FORMAT QUESTION TEXT
 ========================================================= */
 
-function getQuestionOptions(
-    question,
-    group
-) {
-
-    const sources = [];
-
-
-    if (
-        question &&
-        Array.isArray(
-            question.options
-        )
-    ) {
-
-        sources.push(
-            question.options
-        );
-
-    }
-
-
-    if (
-        group &&
-        Array.isArray(
-            group.options
-        )
-    ) {
-
-        sources.push(
-            group.options
-        );
-
-    }
-
-
-    if (
-        group &&
-        Array.isArray(
-            group.choices
-        )
-    ) {
-
-        sources.push(
-            group.choices
-        );
-
-    }
-
-
-    if (
-        group &&
-        Array.isArray(
-            group.answerOptions
-        )
-    ) {
-
-        sources.push(
-            group.answerOptions
-        );
-
-    }
-
-
-    if (
-        group &&
-        Array.isArray(
-            group.words
-        )
-    ) {
-
-        sources.push(
-            group.words
-        );
-
-    }
-
-
-    if (
-        group &&
-        Array.isArray(
-            group.wordBank
-        )
-    ) {
-
-        sources.push(
-            group.wordBank
-        );
-
-    }
-
-
-    if (!sources.length) {
-        return [];
-    }
-
-
-    return sources[0];
-
-}
-
-
-/* =========================================================
-   UNIQUE OPTIONS
-========================================================= */
-
-function uniqueOptions(
-    options
-) {
-
-    const result = [];
-    const seen = new Set();
-
-
-    (
-        options ||
-        []
-    ).forEach(
-        function (option) {
-
-            const value =
-                normalizeAnswer(
-                    optionValue(
-                        option
-                    )
-                );
-
-
-            if (!seen.has(value)) {
-
-                seen.add(
-                    value
-                );
-
-                result.push(
-                    option
-                );
-
-            }
-
-        }
-    );
-
-
-    return result;
-
-}
-
-
-/* =========================================================
-   INPUT LISTENER
-========================================================= */
-
-function attachInputListener(
-    control
-) {
-
-    const input =
-        control.querySelector(
-            "input"
-        );
-
-
-    if (!input) {
-        return;
-    }
-
-
-    input.addEventListener(
-        "input",
-        handleAnswerChange
-    );
-
-
-    input.addEventListener(
-        "change",
-        handleAnswerChange
-    );
-
-}
-
-
-/* =========================================================
-   HANDLE ANSWER CHANGE
-========================================================= */
-
-function handleAnswerChange(event) {
-
-    const element =
-        event.target;
-
-
-    const number =
-        Number(
-            element.dataset.questionNumber
-        );
-
-
-    if (
-        !Number.isFinite(
-            number
-        )
-    ) {
-        return;
-    }
-
-
-    let value = "";
-
-
-    if (
-        element.type === "radio"
-    ) {
-
-        if (!element.checked) {
-            return;
-        }
-
-        value =
-            element.value;
-
-    } else {
-
-        value =
-            element.value;
-
-    }
-
-
-    studentAnswers[
-        number
-    ] =
-        value;
-
-
-    saveAnswersToStorage();
-
-
-    updateQuestionNavigator();
-
-}
-
-
-/* =========================================================
-   SAVE ALL VISIBLE ANSWERS
-========================================================= */
-
-function saveAllVisibleAnswers() {
-
-    /*
-     * Inputs
-     */
-
-    document
-        .querySelectorAll(
-            "[data-question-number]"
-        )
-        .forEach(
-            function (element) {
-
-                const number =
-                    Number(
-                        element.dataset.questionNumber
-                    );
-
-
-                if (
-                    !Number.isFinite(
-                        number
-                    )
-                ) {
-                    return;
-                }
-
-
-                /*
-                 * Skip drag zones.
-                 */
-
-                if (
-                    element.classList.contains(
-                        "summary-drop-zone"
-                    ) ||
-                    element.classList.contains(
-                        "drag-drop-zone"
-                    )
-                ) {
-                    return;
-                }
-
-
-                /*
-                 * Radio.
-                 */
-
-                if (
-                    element.type ===
-                    "radio"
-                ) {
-
-                    if (
-                        element.checked
-                    ) {
-
-                        studentAnswers[
-                            number
-                        ] =
-                            element.value;
-
-                    }
-
-                    return;
-
-                }
-
-
-                /*
-                 * Select/input.
-                 */
-
-                if (
-                    "value" in element
-                ) {
-
-                    studentAnswers[
-                        number
-                    ] =
-                        element.value;
-
-                }
-
-            }
-        );
-
-
-    saveAnswersToStorage();
-
-    updateQuestionNavigator();
-
-}
-
-
-/* =========================================================
-   RESTORE ANSWERS
-========================================================= */
-
-function restoreAnswers() {
-
-    document
-        .querySelectorAll(
-            "[data-question-number]"
-        )
-        .forEach(
-            function (element) {
-
-                const number =
-                    Number(
-                        element.dataset.questionNumber
-                    );
-
-
-                if (
-                    !Number.isFinite(
-                        number
-                    )
-                ) {
-                    return;
-                }
-
-
-                const saved =
-                    studentAnswers[
-                        number
-                    ];
-
-
-                if (
-                    saved ===
-                    undefined ||
-                    saved === null
-                ) {
-                    return;
-                }
-
-
-                if (
-                    element.type ===
-                    "radio"
-                ) {
-
-                    element.checked =
-                        normalizeAnswer(
-                            element.value
-                        ) ===
-                        normalizeAnswer(
-                            saved
-                        );
-
-                    return;
-
-                }
-
-
-                if (
-                    element.tagName ===
-                    "SELECT"
-                ) {
-
-                    element.value =
-                        String(
-                            saved
-                        );
-
-                    return;
-
-                }
-
-
-                if (
-                    "value" in element
-                ) {
-
-                    element.value =
-                        String(
-                            saved
-                        );
-
-                }
-
-            }
-        );
-
-
-    restoreDragDropAnswers();
-
-
-    updateQuestionNavigator();
-
-}
-
-
-/* =========================================================
-   DRAG/DROP SUMMARY
-========================================================= */
-
-function setupDropZone(
-    zone,
-    number
-) {
-
-    zone.addEventListener(
-        "dragover",
-        function (event) {
-
-            event.preventDefault();
-
-            zone.classList.add(
-                "drag-over"
-            );
-
-        }
-    );
-
-
-    zone.addEventListener(
-        "dragleave",
-        function () {
-
-            zone.classList.remove(
-                "drag-over"
-            );
-
-        }
-    );
-
-
-    zone.addEventListener(
-        "drop",
-        function (event) {
-
-            event.preventDefault();
-
-
-            zone.classList.remove(
-                "drag-over"
-            );
-
-
-            let data = null;
-
-
-            try {
-
-                data =
-                    JSON.parse(
-                        event.dataTransfer.getData(
-                            "text/plain"
-                        )
-                    );
-
-            } catch (error) {
-
-                data = null;
-
-            }
-
-
-            if (!data) {
-                return;
-            }
-
-
-            placeDragAnswer(
-                zone,
-                number,
-                data.value,
-                data.text
-            );
-
-        }
-    );
-
-
-    zone.addEventListener(
-        "click",
-        function () {
-
-            if (
-                selectedDragOption
-            ) {
-
-                placeDragAnswer(
-                    zone,
-                    number,
-                    selectedDragOption.value,
-                    selectedDragOption.text
-                );
-
-
-                selectedDragOption =
-                    null;
-
-
-                document
-                    .querySelectorAll(
-                        ".summary-drag-word"
-                    )
-                    .forEach(
-                        function (element) {
-
-                            element.classList.remove(
-                                "selected"
-                            );
-
-                        }
-                    );
-
-            }
-
-        }
-    );
-
-}
-
-
-/* =========================================================
-   PLACE DRAG ANSWER
-========================================================= */
-
-function placeDragAnswer(
-    zone,
-    number,
-    value,
+function formatQuestionText(
     text
 ) {
 
-    studentAnswers[
-        number
-    ] =
-        value;
+    if (!text) {
+        return "";
+    }
 
-
-    zone.innerHTML = `
-
-        <span class="summary-drop-answer">
-
-            ${escapeHTML(
-                text
-            )}
-
-        </span>
-
-    `;
-
-
-    zone.classList.add(
-        "has-answer"
+    return escapeHTML(
+        String(text)
+    )
+    .replace(
+        /\n/g,
+        "<br>"
     );
 
-
-    saveAnswersToStorage();
-
-
-    updateQuestionNavigator();
-
 }
 
 
 /* =========================================================
-   RESTORE DRAG ANSWERS
+   SAVE ANSWER
 ========================================================= */
 
-function restoreDragDropAnswers() {
-
-    document
-        .querySelectorAll(
-            ".summary-drop-zone"
-        )
-        .forEach(
-            function (zone) {
-
-                const number =
-                    Number(
-                        zone.dataset.questionNumber
-                    );
-
-
-                const saved =
-                    studentAnswers[
-                        number
-                    ];
-
-
-                if (
-                    saved ===
-                    undefined ||
-                    saved === null ||
-                    String(
-                        saved
-                    ).trim() === ""
-                ) {
-                    return;
-                }
-
-
-                const option =
-                    findVisibleOption(
-                        saved
-                    );
-
-
-                if (option) {
-
-                    placeDragAnswer(
-                        zone,
-                        number,
-                        option.value,
-                        option.text
-                    );
-
-                }
-
-            }
-        );
-
-}
-
-
-/* =========================================================
-   FIND VISIBLE OPTION
-========================================================= */
-
-function findVisibleOption(
+function saveAnswer(
+    number,
     value
 ) {
 
-    const target =
-        normalizeAnswer(
-            value
+    studentAnswers[
+        number
+    ] = value;
+
+    saveAnswersToStorage();
+
+}
+
+
+/* =========================================================
+   LOCAL STORAGE KEY
+========================================================= */
+
+function getAnswerStorageKey() {
+
+    return (
+        CONFIG.ANSWER_STORAGE_PREFIX +
+        String(
+            currentTestNumber ||
+            ""
+        )
+    );
+
+}
+
+
+/* =========================================================
+   SAVE ANSWERS TO LOCAL STORAGE
+========================================================= */
+
+function saveAnswersToStorage() {
+
+    if (!currentTestNumber) {
+        return;
+    }
+
+    try {
+
+        localStorage.setItem(
+            getAnswerStorageKey(),
+            JSON.stringify(
+                studentAnswers
+            )
         );
 
+    } catch (error) {
 
-    const elements =
-        document.querySelectorAll(
-            ".summary-drag-word, .drag-option"
+        console.warn(
+            "Could not save answers:",
+            error
         );
-
-
-    for (
-        const element of elements
-    ) {
-
-        const elementValue =
-            normalizeAnswer(
-                element.dataset.value
-            );
-
-
-        const elementText =
-            normalizeAnswer(
-                element.dataset.text ||
-                element.textContent
-            );
-
-
-        if (
-            elementValue ===
-                target ||
-            elementText ===
-                target
-        ) {
-
-            return {
-
-                value:
-                    element.dataset.value ||
-                    element.dataset.text,
-
-                text:
-                    element.dataset.text ||
-                    element.textContent.trim()
-
-            };
-
-        }
 
     }
 
+}
 
-    return {
 
-        value: String(value),
+/* =========================================================
+   LOAD SAVED ANSWERS
+========================================================= */
 
-        text: String(value)
+function loadSavedAnswers() {
 
-    };
+    if (!currentTestNumber) {
+        return;
+    }
+
+    try {
+
+        const saved =
+            localStorage.getItem(
+                getAnswerStorageKey()
+            );
+
+        if (!saved) {
+            return;
+        }
+
+        const parsed =
+            JSON.parse(
+                saved
+            );
+
+        if (
+            parsed &&
+            typeof parsed ===
+            "object"
+        ) {
+
+            studentAnswers =
+                parsed;
+
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Could not restore answers:",
+            error
+        );
+
+    }
 
 }
 
@@ -3615,163 +3130,84 @@ function findVisibleOption(
 
 function renderQuestionNavigator() {
 
-    const nav =
+    const containers = [
         document.getElementById(
             "questionNavigator"
-        );
-
-
-    if (!nav) {
-        return;
-    }
-
-
-    const numbers =
-        getAllQuestionNumbers();
-
-
-    nav.innerHTML =
-        numbers
-            .map(
-                function (number) {
-
-                    return `
-
-                        <button
-                            type="button"
-                            class="question-nav-item"
-                            data-question-nav="${number}"
-                        >
-                            ${number}
-                        </button>
-
-                    `;
-
-                }
-            )
-            .join("");
-
-
-    nav
-        .querySelectorAll(
-            "button"
+        ),
+        document.getElementById(
+            "questionNav"
+        ),
+        document.getElementById(
+            "questionNumbers"
         )
-        .forEach(
-            function (button) {
+    ];
 
-                button.addEventListener(
-                    "click",
-                    function () {
-
-                        jumpToQuestion(
-                            Number(
-                                button.dataset.questionNav
-                            )
-                        );
-
-                    }
-                );
-
+    const box =
+        containers.find(
+            function (element) {
+                return !!element;
             }
         );
 
+    if (!box) {
+        return;
+    }
 
-    updateQuestionNavigator();
+    const numbers =
+        getQuestionNumbersForPart(
+            currentTest.parts[
+                currentPartIndex
+            ]
+        );
 
-}
+    box.innerHTML = "";
 
+    numbers.forEach(
+        function (number) {
 
-/* =========================================================
-   GET ALL QUESTION NUMBERS
-========================================================= */
+            const button =
+                document.createElement(
+                    "button"
+                );
 
-function getAllQuestionNumbers() {
+            button.type =
+                "button";
 
-    const numbers = [];
+            button.className =
+                "question-nav-button";
 
+            button.textContent =
+                number;
 
-    (
-        currentTest?.parts ||
-        []
-    ).forEach(
-        function (part) {
+            button.dataset.questionNumber =
+                number;
 
-            (
-                part.questionGroups ||
-                []
-            ).forEach(
-                function (group) {
+            if (
+                isQuestionAnswered(
+                    number
+                )
+            ) {
 
-                    (
-                        group.questions ||
-                        []
-                    ).forEach(
-                        function (question) {
+                button.classList.add(
+                    "answered"
+                );
 
-                            const number =
-                                Number(
-                                    question.number
-                                );
+            }
 
+            button.addEventListener(
+                "click",
+                function () {
 
-                            if (
-                                Number.isFinite(
-                                    number
-                                )
-                            ) {
-
-                                numbers.push(
-                                    number
-                                );
-
-                            }
-
-                        }
-                    );
-
-
-                    (
-                        group.blanks ||
-                        []
-                    ).forEach(
-                        function (blank) {
-
-                            const number =
-                                Number(
-                                    blank.number
-                                );
-
-
-                            if (
-                                Number.isFinite(
-                                    number
-                                )
-                            ) {
-
-                                numbers.push(
-                                    number
-                                );
-
-                            }
-
-                        }
+                    jumpToQuestion(
+                        number
                     );
 
                 }
             );
 
-        }
-    );
-
-
-    return [
-        ...new Set(
-            numbers
-        )
-    ].sort(
-        function (a, b) {
-
-            return a - b;
+            box.appendChild(
+                button
+            );
 
         }
     );
@@ -3785,63 +3221,27 @@ function getAllQuestionNumbers() {
 
 function updateQuestionNavigator() {
 
-    const nav =
-        document.getElementById(
-            "questionNavigator"
+    const buttons =
+        document.querySelectorAll(
+            ".question-nav-button"
         );
 
+    buttons.forEach(
+        function (button) {
 
-    if (!nav) {
-        return;
-    }
-
-
-    nav
-        .querySelectorAll(
-            "[data-question-nav]"
-        )
-        .forEach(
-            function (button) {
-
-                const number =
-                    Number(
-                        button.dataset.questionNav
-                    );
-
-
-                button.classList.toggle(
-                    "answered",
-                    isQuestionAnswered(
-                        number
-                    )
+            const number =
+                Number(
+                    button.dataset.questionNumber
                 );
 
-            }
-        );
+            button.classList.toggle(
+                "answered",
+                isQuestionAnswered(
+                    number
+                )
+            );
 
-}
-
-
-/* =========================================================
-   IS ANSWERED
-========================================================= */
-
-function isQuestionAnswered(
-    number
-) {
-
-    const value =
-        studentAnswers[
-            number
-        ];
-
-
-    return (
-        value !== undefined &&
-        value !== null &&
-        String(
-            value
-        ).trim() !== ""
+        }
     );
 
 }
@@ -3857,87 +3257,252 @@ function jumpToQuestion(
 
     const element =
         document.querySelector(
-            `[data-question-number="${number}"]`
+            `[data-question-number="${CSS.escape(
+                String(number)
+            )}"]`
         );
-
 
     if (!element) {
         return;
     }
 
-
-    const question =
+    const target =
         element.closest(
-            ".question, .drag-question, .summary-drop-zone"
-        );
+            ".question-item"
+        ) ||
+        element;
 
-
-    (
-        question ||
-        element
-    ).scrollIntoView({
-
+    target.scrollIntoView({
         behavior: "smooth",
-
         block: "center"
-
     });
 
 }
 
 
 /* =========================================================
-   NEXT PART
+   GET QUESTION NUMBERS
 ========================================================= */
 
-function nextPart() {
+function getQuestionNumbersForPart(
+    part
+) {
+
+    const numbers = [];
+
+    (
+        part.questionGroups ||
+        []
+    ).forEach(
+        function (group) {
+
+            (
+                group.questions ||
+                []
+            ).forEach(
+                function (question) {
+
+                    const number =
+                        Number(
+                            question.number
+                        );
+
+                    if (
+                        Number.isFinite(
+                            number
+                        )
+                    ) {
+
+                        numbers.push(
+                            number
+                        );
+
+                    }
+
+                }
+            );
+
+            (
+                group.blanks ||
+                []
+            ).forEach(
+                function (blank) {
+
+                    const number =
+                        Number(
+                            blank.number
+                        );
+
+                    if (
+                        Number.isFinite(
+                            number
+                        )
+                    ) {
+
+                        numbers.push(
+                            number
+                        );
+
+                    }
+
+                }
+            );
+
+        }
+    );
+
+    return [
+        ...new Set(
+            numbers
+        )
+    ]
+    .sort(
+        function (a, b) {
+            return a - b;
+        }
+    );
+
+}
+
+
+/* =========================================================
+   GET ALL QUESTION NUMBERS
+========================================================= */
+
+function getAllQuestionNumbers() {
+
+    const numbers = [];
+
+    if (!currentTest) {
+        return numbers;
+    }
+
+    currentTest.parts.forEach(
+        function (part) {
+
+            getQuestionNumbersForPart(
+                part
+            ).forEach(
+                function (number) {
+
+                    numbers.push(
+                        number
+                    );
+
+                }
+            );
+
+        }
+    );
+
+    return [
+        ...new Set(
+            numbers
+        )
+    ]
+    .sort(
+        function (a, b) {
+            return a - b;
+        }
+    );
+
+}
+
+
+/* =========================================================
+   QUESTION ANSWERED
+========================================================= */
+
+function isQuestionAnswered(
+    number
+) {
+
+    const value =
+        studentAnswers[
+            number
+        ];
+
+    if (
+        value === undefined ||
+        value === null
+    ) {
+
+        return false;
+
+    }
+
+    if (
+        Array.isArray(
+            value
+        )
+    ) {
+
+        return value.length >
+            0;
+
+    }
+
+    return String(
+        value
+    ).trim() !== "";
+
+}
+
+
+/* =========================================================
+   PART NAVIGATION
+========================================================= */
+
+function previousPart() {
+
+    if (
+        !currentTest ||
+        currentPartIndex <=
+        0
+    ) {
+
+        return;
+
+    }
 
     saveAllVisibleAnswers();
 
+    currentPartIndex--;
+
+    renderCurrentPart();
+
+}
+
+
+function nextPart() {
+
+    if (!currentTest) {
+        return;
+    }
+
+    saveAllVisibleAnswers();
 
     if (
         currentPartIndex <
-        currentTest.parts.length - 1
+        currentTest.parts.length -
+        1
     ) {
 
         currentPartIndex++;
 
         renderCurrentPart();
 
-    } else {
-
-        confirmSubmitTest();
+        return;
 
     }
+
+    confirmSubmitTest();
 
 }
 
 
 /* =========================================================
-   PREVIOUS PART
-========================================================= */
-
-function previousPart() {
-
-    saveAllVisibleAnswers();
-
-
-    if (
-        currentPartIndex >
-        0
-    ) {
-
-        currentPartIndex--;
-
-        renderCurrentPart();
-
-    }
-
-}
-
-
-/* =========================================================
-   PART BUTTONS
+   UPDATE PART BUTTONS
 ========================================================= */
 
 function updatePartButtons() {
@@ -3947,35 +3512,35 @@ function updatePartButtons() {
             "previousPartButton"
         );
 
-
     const next =
         document.getElementById(
             "nextPartButton"
         );
 
-
     if (previous) {
 
         previous.disabled =
-            currentPartIndex === 0;
+            currentPartIndex <=
+            0;
 
     }
-
 
     if (next) {
 
         if (
-            currentPartIndex ===
-            currentTest.parts.length - 1
+            currentTest &&
+            currentPartIndex <
+            currentTest.parts.length -
+            1
         ) {
 
             next.textContent =
-                "Submit Test →";
+                "Next Part";
 
         } else {
 
             next.textContent =
-                "Next Part →";
+                "Submit Test";
 
         }
 
@@ -3985,33 +3550,192 @@ function updatePartButtons() {
 
 
 /* =========================================================
-   SCROLL PANELS
+   SAVE VISIBLE ANSWERS
 ========================================================= */
 
-function scrollTestPanelsToTop() {
+function saveAllVisibleAnswers() {
 
-    [
-        "passagePanel",
-        "questionsPanel"
-    ]
+    /*
+     * SELECTS
+     */
+    document
+        .querySelectorAll(
+            ".answer-select"
+        )
         .forEach(
-            function (id) {
+            function (select) {
 
-                const element =
-                    document.getElementById(
-                        id
+                const number =
+                    Number(
+                        select.dataset.questionNumber
                     );
 
+                if (
+                    Number.isFinite(
+                        number
+                    )
+                ) {
 
-                if (element) {
-
-                    element.scrollTop =
-                        0;
+                    studentAnswers[
+                        number
+                    ] =
+                        select.value;
 
                 }
 
             }
         );
+
+    /*
+     * TEXT INPUTS
+     */
+    document
+        .querySelectorAll(
+            ".answer-input"
+        )
+        .forEach(
+            function (input) {
+
+                const item =
+                    input.closest(
+                        ".question-item"
+                    );
+
+                if (!item) {
+                    return;
+                }
+
+                const number =
+                    Number(
+                        item.dataset.questionNumber
+                    );
+
+                if (
+                    Number.isFinite(
+                        number
+                    )
+                ) {
+
+                    studentAnswers[
+                        number
+                    ] =
+                        input.value;
+
+                }
+
+            }
+        );
+
+    /*
+     * RADIO
+     */
+    document
+        .querySelectorAll(
+            'input[type="radio"]:checked'
+        )
+        .forEach(
+            function (input) {
+
+                const match =
+                    input.name.match(
+                        /question_(\d+)/
+                    );
+
+                if (!match) {
+                    return;
+                }
+
+                const number =
+                    Number(
+                        match[1]
+                    );
+
+                studentAnswers[
+                    number
+                ] =
+                    input.value;
+
+            }
+        );
+
+    /*
+     * CHECKBOX
+     */
+    document
+        .querySelectorAll(
+            'input[type="checkbox"]'
+        )
+        .forEach(
+            function () {
+
+                /*
+                 * handled below
+                 */
+
+            }
+        );
+
+    const checkboxGroups =
+        {};
+
+    document
+        .querySelectorAll(
+            'input[type="checkbox"]:checked'
+        )
+        .forEach(
+            function (input) {
+
+                const match =
+                    input.name.match(
+                        /question_(\d+)/
+                    );
+
+                if (!match) {
+                    return;
+                }
+
+                const number =
+                    Number(
+                        match[1]
+                    );
+
+                if (
+                    !checkboxGroups[
+                        number
+                    ]
+                ) {
+
+                    checkboxGroups[
+                        number
+                    ] = [];
+
+                }
+
+                checkboxGroups[
+                    number
+                ].push(
+                    input.value
+                );
+
+            }
+        );
+
+    Object.keys(
+        checkboxGroups
+    ).forEach(
+        function (number) {
+
+            studentAnswers[
+                number
+            ] =
+                checkboxGroups[
+                    number
+                ];
+
+        }
+    );
+
+    saveAnswersToStorage();
 
 }
 
@@ -4022,12 +3746,46 @@ function scrollTestPanelsToTop() {
 
 function confirmSubmitTest() {
 
-    if (testSubmitted) {
+    const modal =
+        document.getElementById(
+            "confirmModal"
+        );
+
+    if (modal) {
+
+        modal.style.display =
+            "flex";
+
         return;
+
     }
 
+    /*
+     * If the modal does not exist,
+     * submit directly.
+     */
+    submitTest();
 
-    openConfirmModal();
+}
+
+
+/* =========================================================
+   CLOSE CONFIRM MODAL
+========================================================= */
+
+function closeConfirmModal() {
+
+    const modal =
+        document.getElementById(
+            "confirmModal"
+        );
+
+    if (modal) {
+
+        modal.style.display =
+            "none";
+
+    }
 
 }
 
@@ -4038,71 +3796,23 @@ function confirmSubmitTest() {
 
 function confirmExitTest() {
 
-    if (
-        !testStarted ||
-        testSubmitted
-    ) {
-
-        showDashboard();
-
-        return;
-
-    }
-
-
-    const answer =
+    const confirmed =
         window.confirm(
-            "Leave this test? Your current test will not be submitted."
+            "Are you sure you want to leave this test? Your current answers are saved locally."
         );
 
-
-    if (answer) {
-
-        stopTimer();
-
-        showDashboard();
-
+    if (!confirmed) {
+        return;
     }
 
-}
+    saveAllVisibleAnswers();
 
+    stopTimer();
 
-/* =========================================================
-   MODAL
-========================================================= */
+    testStarted =
+        false;
 
-function openConfirmModal() {
-
-    const modal =
-        document.getElementById(
-            "confirmModal"
-        );
-
-
-    if (modal) {
-
-        modal.style.display =
-            "flex";
-
-    }
-
-}
-
-
-function closeConfirmModal() {
-
-    const modal =
-        document.getElementById(
-            "confirmModal"
-        );
-
-
-    if (modal) {
-
-        modal.style.display =
-            "none";
-
-    }
+    showDashboard();
 
 }
 
@@ -4117,11 +3827,9 @@ function autoSubmitTest() {
         return;
     }
 
-
     showToast(
         "Time is up. Your test is being submitted."
     );
-
 
     submitTest();
 
@@ -4138,49 +3846,33 @@ function submitTest() {
         return;
     }
 
-
     saveAllVisibleAnswers();
-
 
     closeConfirmModal();
 
-
     stopTimer();
-
 
     testSubmitted =
         true;
 
+    testStarted =
+        false;
 
     testElapsedSeconds =
         calculateTimeUsed();
 
-
-    submittedAnswers =
-        {
-            ...studentAnswers
-        };
-
-
     scoreData =
-        calculateScore(
-            submittedAnswers
-        );
+        calculateScore();
 
-
-    saveResultToLocalStorage();
-
+    saveResultLocally();
 
     renderResult();
-
-
-    clearCurrentTestAnswers();
 
 }
 
 
 /* =========================================================
-   TIME USED
+   CALCULATE TIME USED
 ========================================================= */
 
 function calculateTimeUsed() {
@@ -4188,7 +3880,6 @@ function calculateTimeUsed() {
     if (!testStartTime) {
         return 0;
     }
-
 
     return Math.max(
         0,
@@ -4204,43 +3895,22 @@ function calculateTimeUsed() {
 
 
 /* =========================================================
-   SCORE
+   CALCULATE SCORE
 ========================================================= */
 
-function calculateScore(
-    answerSet
-) {
+function calculateScore() {
 
-    answerSet =
-        answerSet ||
-        studentAnswers;
+    let total = 0;
 
-
-    let total =
-        0;
-
-
-    const partScores =
-        [];
-
-
-    const partTotals =
-        [];
-
+    const partScores = [];
 
     (
-        currentTest?.parts ||
+        currentTest.parts ||
         []
     ).forEach(
         function (part) {
 
-            let partScore =
-                0;
-
-
-            let partTotal =
-                0;
-
+            let partScore = 0;
 
             (
                 part.questionGroups ||
@@ -4248,23 +3918,23 @@ function calculateScore(
             ).forEach(
                 function (group) {
 
+                    /*
+                     * Standard questions.
+                     */
                     const questions =
-                        getGroupQuestions(
-                            group
-                        );
-
+                        group.questions &&
+                        group.questions.length
+                            ? group.questions
+                            : group.blanks ||
+                              [];
 
                     questions.forEach(
                         function (question) {
 
-                            partTotal++;
-
-
                             const given =
-                                answerSet[
+                                studentAnswers[
                                     question.number
                                 ];
-
 
                             if (
                                 answersMatch(
@@ -4283,23 +3953,15 @@ function calculateScore(
                 }
             );
 
-
             partScores.push(
                 partScore
             );
-
-
-            partTotals.push(
-                partTotal
-            );
-
 
             total +=
                 partScore;
 
         }
     );
-
 
     return {
 
@@ -4311,9 +3973,6 @@ function calculateScore(
 
         partScores:
             partScores,
-
-        partTotals:
-            partTotals,
 
         band:
             calculateIELTSBand(
@@ -4331,77 +3990,7 @@ function calculateScore(
 
 
 /* =========================================================
-   GET GROUP QUESTIONS
-   Always includes blanks.
-========================================================= */
-
-function getGroupQuestions(
-    group
-) {
-
-    const result = [];
-
-
-    (
-        group.questions ||
-        []
-    ).forEach(
-        function (question) {
-
-            result.push(
-                question
-            );
-
-        }
-    );
-
-
-    (
-        group.blanks ||
-        []
-    ).forEach(
-        function (blank) {
-
-            /*
-             * Avoid duplicate question numbers.
-             */
-
-            const exists =
-                result.some(
-                    function (item) {
-
-                        return (
-                            Number(
-                                item.number
-                            ) ===
-                            Number(
-                                blank.number
-                            )
-                        );
-
-                    }
-                );
-
-
-            if (!exists) {
-
-                result.push(
-                    blank
-                );
-
-            }
-
-        }
-    );
-
-
-    return result;
-
-}
-
-
-/* =========================================================
-   COUNT QUESTIONS
+   COUNT TOTAL QUESTIONS
 ========================================================= */
 
 function countTotalQuestions() {
@@ -4432,75 +4021,77 @@ function answersMatch(
 
     }
 
-
     /*
-     * Multiple accepted answers.
+     * Multiple correct answers.
      */
-
     if (
         Array.isArray(
             correct
         )
     ) {
 
-        return correct.some(
-            function (answer) {
+        /*
+         * If student's answer is an array,
+         * require all selected answers to be
+         * accepted and the set to match.
+         */
+        if (
+            Array.isArray(
+                given
+            )
+        ) {
 
-                return (
-                    normalizeAnswer(
-                        given
-                    ) ===
-                    normalizeAnswer(
-                        answer
+            const givenNormalized =
+                given
+                    .map(
+                        normalizeAnswer
                     )
-                );
+                    .sort();
+
+            const correctNormalized =
+                correct
+                    .map(
+                        normalizeAnswer
+                    )
+                    .sort();
+
+            if (
+                givenNormalized.length !==
+                correctNormalized.length
+            ) {
+
+                return false;
 
             }
-        );
 
-    }
-
-
-    /*
-     * Object answer.
-     */
-
-    if (
-        correct &&
-        typeof correct === "object"
-    ) {
-
-        const values =
-            [
-                correct.value,
-                correct.answer,
-                correct.text,
-                correct.id,
-                correct.letter
-            ]
-            .filter(
-                function (value) {
+            return givenNormalized.every(
+                function (value, index) {
 
                     return (
-                        value !==
-                        undefined &&
-                        value !==
-                        null
+                        value ===
+                        correctNormalized[
+                            index
+                        ]
                     );
 
                 }
             );
 
+        }
 
-        return values.some(
-            function (value) {
+        /*
+         * Single answer against
+         * accepted answers.
+         */
+        return correct.some(
+            function (answer) {
 
                 return (
                     normalizeAnswer(
-                        given
+                        answer
                     ) ===
                     normalizeAnswer(
-                        value
+                        given
                     )
                 );
 
@@ -4509,6 +4100,35 @@ function answersMatch(
 
     }
 
+    /*
+     * Student array against a single
+     * correct answer.
+     */
+    if (
+        Array.isArray(
+            given
+        )
+    ) {
+
+        if (
+            given.length !==
+            1
+        ) {
+
+            return false;
+
+        }
+
+        return (
+            normalizeAnswer(
+                given[0]
+            ) ===
+            normalizeAnswer(
+                correct
+            )
+        );
+
+    }
 
     return (
         normalizeAnswer(
@@ -4533,301 +4153,73 @@ function normalizeAnswer(
     return String(
         value ?? ""
     )
-        .trim()
-        .replace(
-            /\s+/g,
-            " "
-        )
-        .toLowerCase();
+    .trim()
+    .replace(
+        /\s+/g,
+        " "
+    )
+    .toLowerCase();
 
 }
 
 
 /* =========================================================
-   IELTS READING BAND
+   IELTS BAND
 ========================================================= */
 
 function calculateIELTSBand(
     score
 ) {
 
-    /*
-     * Academic Reading approximate IELTS conversion.
-     */
-
-    const bands = {
-
-        40: 9.0,
-        39: 9.0,
-        38: 8.5,
-        37: 8.5,
-        36: 8.0,
-        35: 8.0,
-        34: 7.5,
-        33: 7.5,
-        32: 7.5,
-        31: 7.0,
-        30: 7.0,
-        29: 6.5,
-        28: 6.5,
-        27: 6.5,
-        26: 6.0,
-        25: 6.0,
-        24: 6.0,
-        23: 6.0,
-        22: 5.5,
-        21: 5.5,
-        20: 5.5,
-        19: 5.5,
-        18: 5.0,
-        17: 5.0,
-        16: 5.0,
-        15: 4.5,
-        14: 4.5,
-        13: 4.5,
-        12: 4.0,
-        11: 4.0,
-        10: 4.0,
-        9: 4.0,
-        8: 3.5,
-        7: 3.5,
-        6: 3.5,
-        5: 3.0,
-        4: 3.0,
-        3: 2.5,
-        2: 2.5,
-        1: 2.0,
-        0: 1.0
-
-    };
-
-
-    const safeScore =
-        Math.max(
-            0,
-            Math.min(
-                40,
-                Number(score) || 0
-            )
-        );
+    if (score >= 39)
+        return 9.0;
 
+    if (score >= 37)
+        return 8.5;
 
-    return (
-        bands[
-            safeScore
-        ] ??
-        1.0
-    );
+    if (score >= 35)
+        return 8.0;
 
-}
+    if (score >= 33)
+        return 7.5;
 
+    if (score >= 30)
+        return 7.0;
 
-/* =========================================================
-   LOCAL STORAGE ANSWER KEY
-========================================================= */
+    if (score >= 27)
+        return 6.5;
 
-function getAnswerStorageKey() {
+    if (score >= 23)
+        return 6.0;
 
-    return (
-        CONFIG.ANSWER_PREFIX +
-        String(
-            currentTestNumber
-        )
-    );
+    if (score >= 19)
+        return 5.5;
 
-}
+    if (score >= 15)
+        return 5.0;
 
+    if (score >= 13)
+        return 4.5;
 
-/* =========================================================
-   SAVE ANSWERS
-========================================================= */
+    if (score >= 10)
+        return 4.0;
 
-function saveAnswersToStorage() {
+    if (score >= 8)
+        return 3.5;
 
-    if (!currentTestNumber) {
-        return;
-    }
+    if (score >= 6)
+        return 3.0;
 
+    if (score >= 4)
+        return 2.5;
 
-    try {
+    if (score >= 2)
+        return 2.0;
 
-        localStorage.setItem(
-            getAnswerStorageKey(),
-            JSON.stringify(
-                studentAnswers
-            )
-        );
+    if (score === 1)
+        return 1.0;
 
-    } catch (error) {
-
-        console.warn(
-            "Could not save answers:",
-            error
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   LOAD ANSWERS
-========================================================= */
-
-function loadSavedAnswers() {
-
-    if (!currentTestNumber) {
-        return;
-    }
-
-
-    try {
-
-        const raw =
-            localStorage.getItem(
-                getAnswerStorageKey()
-            );
-
-
-        if (!raw) {
-            return;
-        }
-
-
-        const saved =
-            JSON.parse(
-                raw
-            );
-
-
-        if (
-            saved &&
-            typeof saved === "object"
-        ) {
-
-            studentAnswers =
-                saved;
-
-        }
-
-    } catch (error) {
-
-        console.warn(
-            "Could not load saved answers:",
-            error
-        );
-
-
-        studentAnswers =
-            {};
-
-    }
-
-}
-
-
-/* =========================================================
-   SAVE RESULT LOCALLY
-========================================================= */
-
-function saveResultToLocalStorage() {
-
-    if (!currentTestNumber) {
-        return;
-    }
-
-
-    try {
-
-        const key =
-            CONFIG.RESULT_PREFIX +
-            currentTestNumber;
-
-
-        const results =
-            JSON.parse(
-                localStorage.getItem(
-                    key
-                ) ||
-                "[]"
-            );
-
-
-        results.unshift({
-
-            date:
-                new Date().toISOString(),
-
-            test:
-                currentTestNumber,
-
-            title:
-                currentTest?.title ||
-                `IELTS Reading Test ${currentTestNumber}`,
-
-            score:
-                scoreData.totalScore,
-
-            total:
-                scoreData.totalQuestions,
-
-            band:
-                scoreData.band,
-
-            timeUsed:
-                scoreData.timeUsed
-
-        });
-
-
-        localStorage.setItem(
-            key,
-            JSON.stringify(
-                results.slice(
-                    0,
-                    20
-                )
-            )
-        );
-
-    } catch (error) {
-
-        console.warn(
-            "Could not save result:",
-            error
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   CLEAR CURRENT ANSWERS
-========================================================= */
-
-function clearCurrentTestAnswers() {
-
-    /*
-     * Do NOT delete submittedAnswers.
-     *
-     * The result screen needs them.
-     */
-
-    try {
-
-        localStorage.removeItem(
-            getAnswerStorageKey()
-        );
-
-    } catch (error) {
-
-        console.warn(
-            "Could not clear answers:",
-            error
-        );
-
-    }
+    return 0;
 
 }
 
@@ -4838,467 +4230,187 @@ function clearCurrentTestAnswers() {
 
 function renderResult() {
 
-    if (!scoreData) {
-        return;
-    }
-
-
     showScreen(
         "resultScreen"
     );
 
-
-    const screen =
-        document.getElementById(
-            "resultScreen"
-        );
-
-
-    if (!screen) {
-        return;
-    }
-
-
-    /*
-     * Use the existing result content if available.
-     */
-
-    let oldContent =
-        screen.querySelector(
-            ".result-content"
-        );
-
-
-    if (!oldContent) {
-
-        oldContent =
-            screen.querySelector(
-                ".result-card"
-            );
-
-    }
-
-
-    if (!oldContent) {
-
-        oldContent =
-            screen;
-
-    }
-
-
-    const report =
-        document.createElement(
-            "div"
-        );
-
-
-    report.id =
-        "readingResultReport";
-
-
-    report.className =
-        "reading-result-report";
-
-
-    const score =
-        scoreData.totalScore;
-
-
-    const total =
-        scoreData.totalQuestions;
-
-
-    const incorrect =
-        countIncorrectAnswers();
-
-
-    const unanswered =
-        countUnansweredAnswers();
-
-
-    const accuracy =
-        total
-            ? Math.round(
-                (
-                    score /
-                    total
-                ) *
-                100
-            )
-            : 0;
-
-
-    const percentage =
-        total
-            ? Math.round(
-                (
-                    score /
-                    total
-                ) *
-                100
-            )
-            : 0;
-
-
-    const title =
+    setText(
+        "resultTestTitle",
         currentTest?.title ||
-        `IELTS Reading Test ${currentTestNumber}`;
-
-
-    report.innerHTML = `
-
-        <div class="results-page">
-
-            <div class="results-heading">
-
-                <div>
-
-                    <div class="results-kicker">
-                        TEST COMPLETE
-                    </div>
-
-                    <h1>
-                        Your Reading Result
-                    </h1>
-
-                    <p>
-                        ${escapeHTML(title)}
-                    </p>
-
-                </div>
-
-                <button
-                    type="button"
-                    class="print-score-button"
-                    onclick="printScorePDF()"
-                >
-                    Print result
-                </button>
-
-            </div>
-
-
-            <div class="result-hero">
-
-                <div
-                    class="score-ring"
-                    style="--score-percent:${percentage}%"
-                >
-
-                    <div class="score-ring-inner">
-
-                        <strong>
-                            ${score}
-                        </strong>
-
-                        <span>
-                            / ${total}
-                        </span>
-
-                    </div>
-
-                </div>
-
-
-                <div class="hero-copy">
-
-                    <div class="status-pill">
-                        Reading test completed
-                    </div>
-
-                    <h2>
-                        Estimated IELTS Reading Band
-                        ${Number(scoreData.band).toFixed(1)}
-                    </h2>
-
-                    <p>
-                        Time used:
-                        ${escapeHTML(scoreData.timeUsed)}
-                    </p>
-
-                    <small>
-                        Your result is calculated from
-                        the answers submitted at the end
-                        of the test.
-                    </small>
-
-                </div>
-
-            </div>
-
-
-            <div class="result-summary">
-
-                <div>
-                    <strong>
-                        ${score}
-                    </strong>
-                    <span>
-                        Correct
-                    </span>
-                </div>
-
-                <div>
-                    <strong>
-                        ${incorrect}
-                    </strong>
-                    <span>
-                        Incorrect
-                    </span>
-                </div>
-
-                <div>
-                    <strong>
-                        ${unanswered}
-                    </strong>
-                    <span>
-                        Unanswered
-                    </span>
-                </div>
-
-                <div>
-                    <strong>
-                        ${accuracy}%
-                    </strong>
-                    <span>
-                        Accuracy
-                    </span>
-                </div>
-
-            </div>
-
-
-            <div class="result-section">
-
-                <div class="result-section-heading">
-
-                    <h2>
-                        Part-by-part score
-                    </h2>
-
-                    <span>
-                        ${score} / ${total}
-                    </span>
-
-                </div>
-
-                <div
-                    class="part-score-grid"
-                    id="readingPartScoreGrid"
-                ></div>
-
-            </div>
-
-
-            <div class="result-section">
-
-                <div class="result-section-heading">
-
-                    <h2>
-                        Question review
-                    </h2>
-
-                    <span>
-                        ${total} questions
-                    </span>
-
-                </div>
-
-
-                <div class="legend">
-
-                    <span>
-                        <i class="legend-dot correct"></i>
-                        Correct
-                    </span>
-
-                    <span>
-                        <i class="legend-dot incorrect"></i>
-                        Incorrect
-                    </span>
-
-                    <span>
-                        <i class="legend-dot unanswered"></i>
-                        Unanswered
-                    </span>
-
-                </div>
-
-
-                <div
-                    class="review-grid"
-                    id="readingReviewGrid"
-                ></div>
-
-            </div>
-
-
-            <div class="results-actions">
-
-                <button
-                    type="button"
-                    class="secondary-btn"
-                    onclick="startAgainFromResult()"
-                >
-                    Start again
-                </button>
-
-                <button
-                    type="button"
-                    class="secondary-btn print-score-button"
-                    onclick="printScorePDF()"
-                >
-                    Print / Save PDF
-                </button>
-
-            </div>
-
-        </div>
-
-    `;
-
-
-    /*
-     * Replace old report.
-     */
-
-    oldContent.innerHTML =
-        "";
-
-    oldContent.appendChild(
-        report
+        `Test ${currentTestNumber}`
     );
 
+    setText(
+        "resultScore",
+        scoreData.totalScore
+    );
+
+    setText(
+        "resultTotal",
+        `/ ${scoreData.totalQuestions}`
+    );
+
+    setText(
+        "resultBand",
+        Number(
+            scoreData.band
+        ).toFixed(1)
+    );
+
+    setText(
+        "resultTime",
+        scoreData.timeUsed
+    );
+
+    renderPartScores();
+
+    renderIncorrectAnswers();
 
     populateReadingPartGrid();
 
     populateReadingReviewGrid();
 
+    createBeautifulPrintButton();
+
+    /*
+     * Scroll to top.
+     */
+    window.scrollTo(
+        0,
+        0
+    );
+
 }
 
 
 /* =========================================================
-   START AGAIN
+   PART SCORES
 ========================================================= */
 
-function startAgainFromResult() {
+function renderPartScores() {
 
-    if (!currentTest) {
+    const box =
+        document.getElementById(
+            "partScores"
+        );
+
+    if (!box) {
         return;
     }
 
+    box.innerHTML =
+        scoreData.partScores
+            .map(
+                function (
+                    score,
+                    index
+                ) {
 
-    submittedAnswers =
-        {};
+                    const part =
+                        currentTest.parts[
+                            index
+                        ];
 
+                    const total =
+                        part
+                            ? getPartQuestionCount(
+                                part
+                            )
+                            : 0;
 
-    scoreData =
-        null;
+                    return `
+                        <div class="part-score">
 
+                            <span class="part-score-label">
+                                Part ${index + 1}
+                            </span>
 
-    studentAnswers =
-        {};
+                            <span class="part-score-value">
+                                ${score}
+                                /
+                                ${total}
+                            </span>
 
+                        </div>
+                    `;
 
-    try {
-
-        localStorage.removeItem(
-            getAnswerStorageKey()
-        );
-
-    } catch (error) {
-
-        console.warn(
-            error
-        );
-
-    }
-
-
-    startTest();
+                }
+            )
+            .join("");
 
 }
 
 
 /* =========================================================
-   PART SCORE GRID
+   RESULT PART GRID
 ========================================================= */
 
 function populateReadingPartGrid() {
 
-    const grid =
+    const containers = [
         document.getElementById(
-            "readingPartScoreGrid"
+            "readingPartGrid"
+        ),
+        document.getElementById(
+            "partScoreGrid"
+        )
+    ];
+
+    const box =
+        containers.find(
+            function (element) {
+                return !!element;
+            }
         );
 
-
-    if (!grid || !scoreData) {
+    if (!box) {
         return;
     }
 
+    box.innerHTML = "";
 
-    grid.innerHTML = "";
+    currentTest.parts.forEach(
+        function (part, index) {
 
-
-    scoreData.partScores.forEach(
-        function (partScore, index) {
+            const score =
+                scoreData.partScores[
+                    index
+                ] ||
+                0;
 
             const total =
-                scoreData.partTotals[
-                    index
-                ];
+                getPartQuestionCount(
+                    part
+                );
 
-
-            const card =
+            const element =
                 document.createElement(
                     "div"
                 );
 
+            element.className =
+                "result-part-card";
 
-            card.className =
-                "part-score-card";
-
-
-            const percentage =
-                total
-                    ? Math.round(
-                        (
-                            partScore /
-                            total
-                        ) *
-                        100
-                    )
-                    : 0;
-
-
-            card.innerHTML = `
-
-                <div class="part-score-title">
-                    Part ${index + 1}
+            element.innerHTML = `
+                <div class="result-part-number">
+                    PART ${index + 1}
                 </div>
 
-                <strong>
-                    ${partScore} / ${total}
-                </strong>
-
-                <span>
-                    ${percentage}%
-                </span>
-
-                <div class="part-score-bar">
-
-                    <span
-                        style="width:${percentage}%"
-                    ></span>
-
+                <div class="result-part-score">
+                    ${score}/${total}
                 </div>
 
+                <div class="result-part-label">
+                    ${
+                        score === total
+                            ? "Perfect"
+                            : "Completed"
+                    }
+                </div>
             `;
 
-
-            grid.appendChild(
-                card
+            box.appendChild(
+                element
             );
 
         }
@@ -5308,177 +4420,110 @@ function populateReadingPartGrid() {
 
 
 /* =========================================================
-   REVIEW GRID
+   PART QUESTION COUNT
 ========================================================= */
 
-function populateReadingReviewGrid() {
+function getPartQuestionCount(
+    part
+) {
 
-    const grid =
+    return getQuestionNumbersForPart(
+        part
+    ).length;
+
+}
+
+
+/* =========================================================
+   INCORRECT ANSWERS
+========================================================= */
+
+function renderIncorrectAnswers() {
+
+    const containers = [
         document.getElementById(
-            "readingReviewGrid"
+            "incorrectAnswers"
+        ),
+        document.getElementById(
+            "reviewAnswers"
+        ),
+        document.getElementById(
+            "wrongAnswers"
+        )
+    ];
+
+    const box =
+        containers.find(
+            function (element) {
+                return !!element;
+            }
         );
 
-
-    if (!grid) {
+    if (!box) {
         return;
     }
 
+    const incorrect =
+        getAllReviewQuestions()
+            .filter(
+                function (item) {
 
-    grid.innerHTML = "";
+                    return !answersMatch(
+                        item.given,
+                        item.answer
+                    );
 
-
-    const questions =
-        getAllQuestionObjects();
-
-
-    questions.forEach(
-        function (question) {
-
-            const number =
-                Number(
-                    question.number
-                );
-
-
-            const given =
-                submittedAnswers[
-                    number
-                ];
-
-
-            const correct =
-                question.answer;
-
-
-            let status =
-                "unanswered";
-
-
-            if (
-                given !==
-                    undefined &&
-                given !==
-                    null &&
-                String(
-                    given
-                ).trim() !== ""
-            ) {
-
-                status =
-                    answersMatch(
-                        given,
-                        correct
-                    )
-                        ? "correct"
-                        : "incorrect";
-
-            }
-
-
-            const item =
-                document.createElement(
-                    "div"
-                );
-
-
-            item.className =
-                `review-item ${status}`;
-
-
-            item.innerHTML = `
-
-                <div class="review-number">
-                    ${number}
-                </div>
-
-                <div class="review-status">
-                    ${
-                        status === "correct"
-                            ? "✓"
-                            : status === "incorrect"
-                                ? "✕"
-                                : "—"
-                    }
-                </div>
-
-                <div class="review-content">
-
-                    <strong>
-                        ${escapeHTML(
-                            getReviewQuestionText(
-                                question
-                            )
-                        )}
-                    </strong>
-
-                    <div class="review-answer">
-
-                        <span>
-                            Your answer:
-                        </span>
-
-                        <b>
-                            ${escapeHTML(
-                                formatReviewAnswer(
-                                    given
-                                )
-                            )}
-                        </b>
-
-                    </div>
-
-                    ${
-                        status !== "correct"
-                            ? `
-                                <div class="review-correct">
-
-                                    <span>
-                                        Correct answer:
-                                    </span>
-
-                                    <b>
-                                        ${escapeHTML(
-                                            formatCorrectAnswer(
-                                                correct
-                                            )
-                                        )}
-                                    </b>
-
-                                </div>
-                            `
-                            : ""
-                    }
-
-                </div>
-
-            `;
-
-
-            grid.appendChild(
-                item
+                }
             );
 
-        }
-    );
+    if (!incorrect.length) {
+
+        box.innerHTML = `
+            <div class="all-correct-message">
+                <div class="all-correct-icon">
+                    ✓
+                </div>
+
+                <div>
+                    <strong>
+                        Excellent!
+                    </strong>
+
+                    <p>
+                        You answered all questions correctly.
+                    </p>
+                </div>
+            </div>
+        `;
+
+        return;
+
+    }
+
+    box.innerHTML =
+        incorrect
+            .map(
+                renderReviewItemHTML
+            )
+            .join("");
 
 }
 
 
 /* =========================================================
-   GET ALL QUESTIONS
+   GET REVIEW QUESTIONS
 ========================================================= */
 
-function getAllQuestionObjects() {
+function getAllReviewQuestions() {
 
-    const result =
-        [];
+    const results = [];
 
+    if (!currentTest) {
+        return results;
+    }
 
-    (
-        currentTest?.parts ||
-        []
-    ).forEach(
-        function (part) {
+    currentTest.parts.forEach(
+        function (part, partIndex) {
 
             (
                 part.questionGroups ||
@@ -5486,47 +4531,42 @@ function getAllQuestionObjects() {
             ).forEach(
                 function (group) {
 
-                    getGroupQuestions(
-                        group
-                    ).forEach(
+                    const questions =
+                        group.questions &&
+                        group.questions.length
+                            ? group.questions
+                            : group.blanks ||
+                              [];
+
+                    questions.forEach(
                         function (question) {
 
-                            const number =
-                                Number(
-                                    question.number
-                                );
+                            results.push({
 
+                                number:
+                                    question.number,
 
-                            if (
-                                Number.isFinite(
-                                    number
-                                )
-                            ) {
-
-                                const exists =
-                                    result.some(
-                                        function (item) {
-
-                                            return (
-                                                Number(
-                                                    item.number
-                                                ) ===
-                                                number
-                                            );
-
-                                        }
-                                    );
-
-
-                                if (!exists) {
-
-                                    result.push(
+                                question:
+                                    getReviewQuestionText(
                                         question
-                                    );
+                                    ),
 
-                                }
+                                answer:
+                                    question.answer,
 
-                            }
+                                given:
+                                    studentAnswers[
+                                        question.number
+                                    ],
+
+                                part:
+                                    partIndex + 1,
+
+                                type:
+                                    group.type ||
+                                    ""
+
+                            });
 
                         }
                     );
@@ -5537,39 +4577,95 @@ function getAllQuestionObjects() {
         }
     );
 
-
-    return result.sort(
-        function (a, b) {
-
-            return (
-                Number(
-                    a.number
-                ) -
-                Number(
-                    b.number
-                )
-            );
-
-        }
-    );
+    return results;
 
 }
 
 
 /* =========================================================
-   QUESTION TEXT FOR REVIEW
+   REVIEW ITEM HTML
+========================================================= */
+
+function renderReviewItemHTML(
+    item
+) {
+
+    return `
+        <div class="review-item">
+
+            <div class="review-item-header">
+
+                <span class="review-question-number">
+                    Question ${escapeHTML(
+                        String(
+                            item.number
+                        )
+                    )}
+                </span>
+
+                <span class="review-part">
+                    Part ${item.part}
+                </span>
+
+            </div>
+
+            <div class="review-question">
+                ${escapeHTML(
+                    item.question
+                )}
+            </div>
+
+            <div class="review-answer-row">
+
+                <div class="review-your-answer">
+                    <span>
+                        Your answer
+                    </span>
+
+                    <strong>
+                        ${escapeHTML(
+                            formatReviewAnswer(
+                                item.given
+                            )
+                        )}
+                    </strong>
+                </div>
+
+                <div class="review-correct-answer">
+                    <span>
+                        Correct answer
+                    </span>
+
+                    <strong>
+                        ${escapeHTML(
+                            formatCorrectAnswer(
+                                item.answer
+                            )
+                        )}
+                    </strong>
+                </div>
+
+            </div>
+
+        </div>
+    `;
+
+}
+
+
+/* =========================================================
+   REVIEW QUESTION TEXT
 ========================================================= */
 
 function getReviewQuestionText(
     question
 ) {
 
-    return (
-        question.text ||
+    return String(
         question.question ||
+        question.text ||
         question.prompt ||
-        question.statement ||
-        `Question ${question.number}`
+        ""
     );
 
 }
@@ -5586,15 +4682,12 @@ function formatReviewAnswer(
     if (
         answer === undefined ||
         answer === null ||
-        String(
-            answer
-        ).trim() === ""
+        answer === ""
     ) {
 
-        return "Not answered";
+        return "No answer";
 
     }
-
 
     if (
         Array.isArray(
@@ -5607,24 +4700,6 @@ function formatReviewAnswer(
         );
 
     }
-
-
-    if (
-        typeof answer ===
-        "object"
-    ) {
-
-        return (
-            answer.text ||
-            answer.value ||
-            answer.answer ||
-            JSON.stringify(
-                answer
-            )
-        );
-
-    }
-
 
     return String(
         answer
@@ -5642,173 +4717,166 @@ function formatCorrectAnswer(
 ) {
 
     if (
-        answer === undefined ||
-        answer === null
-    ) {
-
-        return "Not available";
-
-    }
-
-
-    if (
         Array.isArray(
             answer
         )
     ) {
 
         return answer.join(
-            " / "
+            ", "
         );
 
     }
-
-
-    if (
-        typeof answer ===
-        "object"
-    ) {
-
-        return (
-            answer.text ||
-            answer.value ||
-            answer.answer ||
-            JSON.stringify(
-                answer
-            )
-        );
-
-    }
-
 
     return String(
-        answer
+        answer ??
+        ""
     );
 
 }
 
 
 /* =========================================================
-   INCORRECT COUNT
+   REVIEW GRID
 ========================================================= */
 
-function countIncorrectAnswers() {
+function populateReadingReviewGrid() {
 
-    let count =
-        0;
+    const box =
+        document.getElementById(
+            "readingReviewGrid"
+        );
 
+    if (!box) {
+        return;
+    }
 
-    getAllQuestionObjects()
-        .forEach(
-            function (question) {
+    box.innerHTML = "";
 
-                const given =
-                    submittedAnswers[
-                        question.number
-                    ];
+    const questions =
+        getAllReviewQuestions();
 
+    questions.forEach(
+        function (item) {
 
-                if (
-                    given !==
-                        undefined &&
-                    given !==
-                        null &&
-                    String(
-                        given
-                    ).trim() !== ""
-                ) {
+            const correct =
+                answersMatch(
+                    item.given,
+                    item.answer
+                );
 
-                    if (
-                        !answersMatch(
-                            given,
-                            question.answer
-                        )
-                    ) {
+            const element =
+                document.createElement(
+                    "div"
+                );
 
-                        count++;
+            element.className =
+                correct
+                    ? "review-grid-item correct"
+                    : "review-grid-item incorrect";
+
+            element.innerHTML = `
+                <span>
+                    ${item.number}
+                </span>
+
+                <strong>
+                    ${
+                        correct
+                            ? "✓"
+                            : "✕"
+                    }
+                </strong>
+            `;
+
+            element.addEventListener(
+                "click",
+                function () {
+
+                    const review =
+                        document.querySelector(
+                            `.review-item:nth-of-type(${item.number})`
+                        );
+
+                    if (review) {
+
+                        review.scrollIntoView({
+                            behavior:
+                                "smooth",
+                            block:
+                                "center"
+                        });
 
                     }
 
                 }
-
-            }
-        );
-
-
-    return count;
-
-}
-
-
-/* =========================================================
-   UNANSWERED COUNT
-========================================================= */
-
-function countUnansweredAnswers() {
-
-    let count =
-        0;
-
-
-    getAllQuestionObjects()
-        .forEach(
-            function (question) {
-
-                const given =
-                    submittedAnswers[
-                        question.number
-                    ];
-
-
-                if (
-                    given ===
-                        undefined ||
-                    given ===
-                        null ||
-                    String(
-                        given
-                    ).trim() === ""
-                ) {
-
-                    count++;
-
-                }
-
-            }
-        );
-
-
-    return count;
-
-}
-
-
-/* =========================================================
-   CLEAR RESULT HISTORY
-========================================================= */
-
-function clearResultHistory() {
-
-    for (
-        let i = 1;
-        i <= CONFIG.TEST_COUNT;
-        i++
-    ) {
-
-        try {
-
-            localStorage.removeItem(
-                CONFIG.RESULT_PREFIX +
-                i
             );
 
-        } catch (error) {
-
-            console.warn(
-                error
+            box.appendChild(
+                element
             );
 
         }
+    );
+
+}
+
+
+/* =========================================================
+   LOCAL RESULT
+========================================================= */
+
+function saveResultLocally() {
+
+    if (!currentTestNumber) {
+        return;
+    }
+
+    const result = {
+
+        testNumber:
+            currentTestNumber,
+
+        testTitle:
+            currentTest?.title ||
+            `Test ${currentTestNumber}`,
+
+        score:
+            scoreData.totalScore,
+
+        total:
+            scoreData.totalQuestions,
+
+        band:
+            scoreData.band,
+
+        partScores:
+            scoreData.partScores,
+
+        timeUsed:
+            scoreData.timeUsed,
+
+        submittedAt:
+            new Date().toISOString()
+
+    };
+
+    try {
+
+        localStorage.setItem(
+            CONFIG.RESULT_STORAGE_PREFIX +
+            currentTestNumber,
+            JSON.stringify(
+                result
+            )
+        );
+
+    } catch (error) {
+
+        console.warn(
+            "Could not save result:",
+            error
+        );
 
     }
 
@@ -5816,7 +4884,141 @@ function clearResultHistory() {
 
 
 /* =========================================================
-   PRINT / SAVE PDF
+   PRINT BUTTON
+   ---------------------------------------------------------
+   This creates the button dynamically, so you do NOT
+   need to change your HTML.
+========================================================= */
+
+function createBeautifulPrintButton() {
+
+    let button =
+        document.getElementById(
+            "printResultButton"
+        );
+
+    /*
+     * If the HTML already has a button,
+     * style it.
+     */
+    if (button) {
+
+        stylePrintButton(
+            button
+        );
+
+        button.onclick =
+            printScorePDF;
+
+        return;
+
+    }
+
+    /*
+     * Otherwise create one.
+     */
+    const resultScreen =
+        document.getElementById(
+            "resultScreen"
+        );
+
+    if (!resultScreen) {
+        return;
+    }
+
+    const existing =
+        resultScreen.querySelector(
+            ".result-actions"
+        ) ||
+        resultScreen.querySelector(
+            ".result-buttons"
+        );
+
+    const container =
+        existing ||
+        document.createElement(
+            "div"
+        );
+
+    if (!existing) {
+
+        container.className =
+            "result-actions";
+
+        resultScreen.appendChild(
+            container
+        );
+
+    }
+
+    button =
+        document.createElement(
+            "button"
+        );
+
+    button.type =
+        "button";
+
+    button.id =
+        "printResultButton";
+
+    button.innerHTML = `
+        <span class="print-button-icon">
+            🖨
+        </span>
+
+        <span>
+            Print Result
+        </span>
+    `;
+
+    button.addEventListener(
+        "click",
+        printScorePDF
+    );
+
+    stylePrintButton(
+        button
+    );
+
+    container.appendChild(
+        button
+    );
+
+}
+
+
+/* =========================================================
+   STYLE PRINT BUTTON
+========================================================= */
+
+function stylePrintButton(
+    button
+) {
+
+    button.classList.add(
+        "beautiful-print-button"
+    );
+
+    button.innerHTML = `
+        <span class="print-button-icon">
+            🖨
+        </span>
+
+        <span>
+            Print Result
+        </span>
+    `;
+
+}
+
+
+/* =========================================================
+   PRINT SCORE PDF
+   ---------------------------------------------------------
+   User can choose:
+   - Printer
+   - Save as PDF
 ========================================================= */
 
 function printScorePDF() {
@@ -5825,142 +5027,63 @@ function printScorePDF() {
         return;
     }
 
-
-    const title =
-        currentTest?.title ||
-        `IELTS Reading Test ${currentTestNumber}`;
-
-
-    const score =
-        scoreData.totalScore;
-
-
-    const total =
-        scoreData.totalQuestions;
-
-
-    const band =
-        Number(
-            scoreData.band
-        ).toFixed(1);
-
-
     const incorrect =
-        countIncorrectAnswers();
+        getAllReviewQuestions()
+            .filter(
+                function (item) {
 
-
-    const unanswered =
-        countUnansweredAnswers();
-
-
-    const accuracy =
-        total
-            ? Math.round(
-                (
-                    score /
-                    total
-                ) *
-                100
-            )
-            : 0;
-
-
-    const questions =
-        getAllQuestionObjects();
-
-
-    const reviewHTML =
-        questions
-            .map(
-                function (question) {
-
-                    const given =
-                        submittedAnswers[
-                            question.number
-                        ];
-
-
-                    const correct =
-                        question.answer;
-
-
-                    const answered =
-                        (
-                            given !==
-                                undefined &&
-                            given !==
-                                null &&
-                            String(
-                                given
-                            ).trim() !== ""
-                        );
-
-
-                    const isCorrect =
-                        answered &&
-                        answersMatch(
-                            given,
-                            correct
-                        );
-
-
-                    return `
-
-                        <tr>
-
-                            <td>
-                                ${question.number}
-                            </td>
-
-                            <td>
-                                ${escapeHTML(
-                                    getReviewQuestionText(
-                                        question
-                                    )
-                                )}
-                            </td>
-
-                            <td>
-                                ${escapeHTML(
-                                    formatReviewAnswer(
-                                        given
-                                    )
-                                )}
-                            </td>
-
-                            <td>
-                                ${isCorrect
-                                    ? "Correct"
-                                    : "Incorrect"}
-                            </td>
-
-                            <td>
-                                ${escapeHTML(
-                                    formatCorrectAnswer(
-                                        correct
-                                    )
-                                )}
-                            </td>
-
-                        </tr>
-
-                    `;
+                    return !answersMatch(
+                        item.given,
+                        item.answer
+                    );
 
                 }
-            )
-            .join("");
+            );
 
+    const reportWindow =
+        window.open(
+            "",
+            "_blank",
+            "width=1000,height=800"
+        );
 
-    const partHTML =
+    if (!reportWindow) {
+
+        alert(
+            "Please allow pop-ups for this website to print your result."
+        );
+
+        return;
+
+    }
+
+    const partRows =
         scoreData.partScores
             .map(
                 function (
-                    value,
+                    score,
                     index
                 ) {
 
-                    return `
+                    const total =
+                        getPartQuestionCount(
+                            currentTest.parts[
+                                index
+                            ]
+                        );
 
+                    const percentage =
+                        total
+                            ? Math.round(
+                                (
+                                    score /
+                                    total
+                                ) *
+                                100
+                            )
+                            : 0;
+
+                    return `
                         <tr>
 
                             <td>
@@ -5968,295 +5091,533 @@ function printScorePDF() {
                             </td>
 
                             <td>
-                                ${value}
+                                ${score} / ${total}
                             </td>
 
                             <td>
-                                ${scoreData.partTotals[index]}
+                                ${percentage}%
                             </td>
 
                         </tr>
-
                     `;
 
                 }
             )
             .join("");
 
+    const incorrectRows =
+        incorrect.length
+            ? incorrect
+                .map(
+                    function (item) {
 
-    const printWindow =
-        window.open(
-            "",
-            "_blank"
-        );
+                        return `
+                            <tr>
 
+                                <td>
+                                    ${escapeHTML(
+                                        String(
+                                            item.number
+                                        )
+                                    )}
+                                </td>
 
-    if (!printWindow) {
+                                <td>
+                                    ${escapeHTML(
+                                        item.question
+                                    )}
+                                </td>
 
-        showToast(
-            "Please allow pop-ups to print the result."
-        );
+                                <td class="wrong">
+                                    ${escapeHTML(
+                                        formatReviewAnswer(
+                                            item.given
+                                        )
+                                    )}
+                                </td>
 
-        return;
+                                <td class="correct">
+                                    ${escapeHTML(
+                                        formatCorrectAnswer(
+                                            item.answer
+                                        )
+                                    )}
+                                </td>
 
-    }
+                            </tr>
+                        `;
 
-
-    printWindow.document.write(`
-
-        <!DOCTYPE html>
-
-        <html>
-
-        <head>
-
-            <title>
-                IELTS Reading Result
-            </title>
-
-            <style>
-
-                * {
-                    box-sizing: border-box;
-                }
-
-                body {
-                    font-family:
-                        Arial,
-                        Helvetica,
-                        sans-serif;
-
-                    margin: 0;
-                    padding: 30px;
-
-                    color: #222;
-                    background: white;
-                }
-
-                .header {
-                    display: flex;
-                    justify-content: space-between;
-                    align-items: flex-start;
-
-                    border-bottom:
-                        2px solid #222;
-
-                    padding-bottom: 18px;
-
-                    margin-bottom: 25px;
-                }
-
-                h1 {
-                    margin: 0 0 8px;
-                }
-
-                h2 {
-                    margin-top: 30px;
-                }
-
-                .meta {
-                    color: #666;
-                }
-
-                .summary {
-                    display: grid;
-
-                    grid-template-columns:
-                        repeat(
-                            4,
-                            1fr
-                        );
-
-                    gap: 12px;
-
-                    margin: 20px 0;
-                }
-
-                .summary-box {
-                    border:
-                        1px solid #ddd;
-
-                    padding: 18px;
-
-                    border-radius: 10px;
-
-                    text-align: center;
-                }
-
-                .summary-box strong {
-                    display: block;
-
-                    font-size: 28px;
-
-                    margin-bottom: 5px;
-                }
-
-                .summary-box span {
-                    color: #666;
-                }
-
-                table {
-                    width: 100%;
-
-                    border-collapse:
-                        collapse;
-
-                    margin-top: 15px;
-
-                    font-size: 12px;
-                }
-
-                th,
-                td {
-                    border:
-                        1px solid #ddd;
-
-                    padding: 8px;
-
-                    text-align: left;
-
-                    vertical-align: top;
-                }
-
-                th {
-                    background:
-                        #f1f1f1;
-                }
-
-                .band {
-                    font-size: 42px;
-                    font-weight: bold;
-                }
-
-                .footer {
-                    margin-top: 30px;
-
-                    color: #777;
-
-                    font-size: 11px;
-                }
-
-                @media print {
-
-                    body {
-                        padding: 10px;
                     }
+                )
+                .join("")
+            : `
+                <tr>
 
-                    .no-print {
-                        display: none;
-                    }
+                    <td
+                        colspan="4"
+                        class="all-correct"
+                    >
+                        All questions were answered correctly.
+                    </td>
 
-                    table {
-                        page-break-inside: auto;
-                    }
+                </tr>
+            `;
 
-                    tr {
-                        page-break-inside: avoid;
-                    }
+    const reportHTML = `
+<!DOCTYPE html>
 
-                }
+<html>
 
-            </style>
+<head>
 
-        </head>
+    <meta charset="UTF-8">
 
-        <body>
+    <title>
+        IELTS Reading Result
+    </title>
 
-            <div class="header">
+    <style>
 
-                <div>
+        * {
+            box-sizing: border-box;
+        }
 
-                    <h1>
-                        IELTS Reading Result
-                    </h1>
+        body {
 
-                    <div class="meta">
-                        ${escapeHTML(title)}
-                    </div>
+            margin: 0;
 
-                    <div class="meta">
-                        ${formatDate(
-                            new Date()
-                        )}
-                    </div>
+            padding: 40px;
 
-                </div>
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
 
-                <div>
+            color: #222;
 
-                    <div class="meta">
-                        IELTS Band
-                    </div>
+            background: #f5f6f8;
 
-                    <div class="band">
-                        ${band}
-                    </div>
+        }
 
-                </div>
+        .report {
+
+            max-width: 900px;
+
+            margin: 0 auto;
+
+            background: white;
+
+            padding: 40px;
+
+            border-radius: 18px;
+
+            box-shadow:
+                0 10px 35px
+                rgba(
+                    0,
+                    0,
+                    0,
+                    .08
+                );
+
+        }
+
+        .header {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            align-items:
+                center;
+
+            border-bottom:
+                2px solid #222;
+
+            padding-bottom:
+                22px;
+
+            margin-bottom:
+                30px;
+
+        }
+
+        .brand {
+
+            font-size: 26px;
+
+            font-weight: 800;
+
+            letter-spacing:
+                .5px;
+
+        }
+
+        .date {
+
+            color: #777;
+
+            font-size: 13px;
+
+        }
+
+        .title {
+
+            margin-bottom:
+                25px;
+
+        }
+
+        .title h1 {
+
+            margin: 0 0 8px;
+
+            font-size: 28px;
+
+        }
+
+        .title p {
+
+            margin: 0;
+
+            color: #666;
+
+        }
+
+        .summary {
+
+            display: grid;
+
+            grid-template-columns:
+                repeat(
+                    4,
+                    1fr
+                );
+
+            gap: 15px;
+
+            margin-bottom:
+                30px;
+
+        }
+
+        .summary-card {
+
+            border:
+                1px solid #e4e6ea;
+
+            border-radius:
+                14px;
+
+            padding:
+                20px;
+
+            text-align:
+                center;
+
+            background:
+                #fafafa;
+
+        }
+
+        .summary-label {
+
+            display: block;
+
+            font-size:
+                12px;
+
+            color:
+                #777;
+
+            text-transform:
+                uppercase;
+
+            letter-spacing:
+                .8px;
+
+            margin-bottom:
+                8px;
+
+        }
+
+        .summary-value {
+
+            font-size:
+                27px;
+
+            font-weight:
+                800;
+
+        }
+
+        .section {
+
+            margin-top:
+                30px;
+
+        }
+
+        .section h2 {
+
+            font-size:
+                18px;
+
+            margin:
+                0 0 15px;
+
+            border-left:
+                4px solid #222;
+
+            padding-left:
+                10px;
+
+        }
+
+        table {
+
+            width:
+                100%;
+
+            border-collapse:
+                collapse;
+
+        }
+
+        th,
+        td {
+
+            border:
+                1px solid #ddd;
+
+            padding:
+                11px;
+
+            text-align:
+                left;
+
+            vertical-align:
+                top;
+
+        }
+
+        th {
+
+            background:
+                #f0f1f3;
+
+            font-weight:
+                700;
+
+        }
+
+        .wrong {
+
+            color:
+                #b42318;
+
+            font-weight:
+                700;
+
+        }
+
+        .correct {
+
+            color:
+                #087443;
+
+            font-weight:
+                700;
+
+        }
+
+        .all-correct {
+
+            text-align:
+                center;
+
+            color:
+                #087443;
+
+            font-weight:
+                700;
+
+            padding:
+                20px;
+
+        }
+
+        .footer {
+
+            margin-top:
+                35px;
+
+            padding-top:
+                20px;
+
+            border-top:
+                1px solid #ddd;
+
+            text-align:
+                center;
+
+            font-size:
+                12px;
+
+            color:
+                #777;
+
+        }
+
+        @media print {
+
+            @page {
+
+                size:
+                    A4;
+
+                margin:
+                    12mm;
+
+            }
+
+            body {
+
+                background:
+                    white;
+
+                padding:
+                    0;
+
+            }
+
+            .report {
+
+                max-width:
+                    none;
+
+                box-shadow:
+                    none;
+
+                border-radius:
+                    0;
+
+                padding:
+                    0;
+
+            }
+
+            .no-print {
+
+                display:
+                    none !important;
+
+            }
+
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+    <div class="report">
+
+        <div class="header">
+
+            <div class="brand">
+                IELTSR
+            </div>
+
+            <div class="date">
+                ${escapeHTML(
+                    new Date()
+                        .toLocaleString()
+                )}
+            </div>
+
+        </div>
+
+        <div class="title">
+
+            <h1>
+                IELTS Reading Test Result
+            </h1>
+
+            <p>
+                ${escapeHTML(
+                    currentTest?.title ||
+                    `IELTS Reading Test ${currentTestNumber}`
+                )}
+            </p>
+
+        </div>
+
+        <div class="summary">
+
+            <div class="summary-card">
+
+                <span class="summary-label">
+                    Raw Score
+                </span>
+
+                <span class="summary-value">
+                    ${scoreData.totalScore}
+                    /
+                    ${scoreData.totalQuestions}
+                </span>
 
             </div>
 
+            <div class="summary-card">
 
-            <div class="summary">
+                <span class="summary-label">
+                    IELTS Band
+                </span>
 
-                <div class="summary-box">
-
-                    <strong>
-                        ${score}
-                    </strong>
-
-                    <span>
-                        Correct
-                    </span>
-
-                </div>
-
-
-                <div class="summary-box">
-
-                    <strong>
-                        ${incorrect}
-                    </strong>
-
-                    <span>
-                        Incorrect
-                    </span>
-
-                </div>
-
-
-                <div class="summary-box">
-
-                    <strong>
-                        ${unanswered}
-                    </strong>
-
-                    <span>
-                        Unanswered
-                    </span>
-
-                </div>
-
-
-                <div class="summary-box">
-
-                    <strong>
-                        ${accuracy}%
-                    </strong>
-
-                    <span>
-                        Accuracy
-                    </span>
-
-                </div>
+                <span class="summary-value">
+                    ${Number(
+                        scoreData.band
+                    ).toFixed(1)}
+                </span>
 
             </div>
 
+            <div class="summary-card">
+
+                <span class="summary-label">
+                    Time Used
+                </span>
+
+                <span class="summary-value">
+                    ${escapeHTML(
+                        scoreData.timeUsed
+                    )}
+                </span>
+
+            </div>
+
+            <div class="summary-card">
+
+                <span class="summary-label">
+                    Questions
+                </span>
+
+                <span class="summary-value">
+                    ${scoreData.totalQuestions}
+                </span>
+
+            </div>
+
+        </div>
+
+        <div class="section">
 
             <h2>
                 Part Scores
             </h2>
-
 
             <table>
 
@@ -6269,11 +5630,11 @@ function printScorePDF() {
                         </th>
 
                         <th>
-                            Correct
+                            Score
                         </th>
 
                         <th>
-                            Total
+                            Percentage
                         </th>
 
                     </tr>
@@ -6282,17 +5643,19 @@ function printScorePDF() {
 
                 <tbody>
 
-                    ${partHTML}
+                    ${partRows}
 
                 </tbody>
 
             </table>
 
+        </div>
+
+        <div class="section">
 
             <h2>
-                Question Review
+                Incorrect Answers
             </h2>
-
 
             <table>
 
@@ -6301,7 +5664,7 @@ function printScorePDF() {
                     <tr>
 
                         <th>
-                            Q
+                            Question
                         </th>
 
                         <th>
@@ -6310,10 +5673,6 @@ function printScorePDF() {
 
                         <th>
                             Your Answer
-                        </th>
-
-                        <th>
-                            Status
                         </th>
 
                         <th>
@@ -6326,124 +5685,267 @@ function printScorePDF() {
 
                 <tbody>
 
-                    ${reviewHTML}
+                    ${incorrectRows}
 
                 </tbody>
 
             </table>
 
+        </div>
 
-            <div class="footer">
+        <div class="footer">
 
-                IELTS Reading Practice
+            IELTS Reading Practice Website
 
-            </div>
+            <br>
 
+            This result was generated locally
+            on your device.
 
-            <script>
+        </div>
 
-                window.onload =
-                    function () {
+    </div>
 
-                        setTimeout(
-                            function () {
+    <script>
 
-                                window.print();
+        window.onload = function () {
 
-                            },
-                            300
-                        );
+            setTimeout(
+                function () {
 
-                    };
+                    window.print();
 
-            <\/script>
+                },
+                500
+            );
 
-        </body>
+        };
 
-        </html>
+    <\/script>
 
-    `);
+</body>
 
+</html>
+    `;
 
-    printWindow.document.close();
+    reportWindow.document.open();
+
+    reportWindow.document.write(
+        reportHTML
+    );
+
+    reportWindow.document.close();
 
 }
 
 
 /* =========================================================
-   SCREEN MANAGEMENT
-   IMPORTANT FIX
-   ---------------------------------------------------------
-   Your HTML has:
-
-   style="display: none;"
-
-   Therefore:
-
-       element.style.display = ""
-
-   DOES NOT WORK.
-
-   We explicitly use "block".
+   VOCABULARY
 ========================================================= */
 
-function showScreen(id) {
-
-    const screens =
-        document.querySelectorAll(
-            ".screen"
-        );
+let vocabulary = {};
 
 
-    screens.forEach(
-        function (screen) {
+async function loadVocabulary() {
 
-            screen.style.display =
-                "none";
+    vocabulary = {};
 
-            screen.classList.remove(
-                "active"
+    try {
+
+        const response =
+            await fetch(
+                `./vocabulary.json?${Date.now()}`,
+                {
+                    cache:
+                        "no-store"
+                }
             );
 
+        if (!response.ok) {
+            return;
         }
-    );
 
+        const data =
+            await response.json();
 
-    const target =
-        document.getElementById(
-            id
-        );
+        vocabulary =
+            data.words ||
+            data ||
+            {};
 
+    } catch (error) {
 
-    if (!target) {
-
-        console.error(
-            "Screen not found:",
-            id
-        );
-
-        return;
+        /*
+         * Vocabulary is optional.
+         */
+        vocabulary = {};
 
     }
 
+}
+
+
+/* =========================================================
+   HIGHLIGHT VOCABULARY
+========================================================= */
+
+function highlightVocabulary(
+    text
+) {
 
     /*
-     * THIS IS THE IMPORTANT FIX.
+     * If no vocabulary exists,
+     * return normal text.
      */
+    if (
+        !vocabulary ||
+        typeof vocabulary !==
+        "object" ||
+        !Object.keys(
+            vocabulary
+        ).length
+    ) {
 
-    target.style.display =
+        return escapeHTML(
+            text
+        )
+        .replace(
+            /\n/g,
+            "<br>"
+        );
+
+    }
+
+    /*
+     * Keep this intentionally safe.
+     * We do not aggressively replace every
+     * English word because that can damage
+     * punctuation and HTML.
+     */
+    return escapeHTML(
+        text
+    )
+    .replace(
+        /\n/g,
+        "<br>"
+    );
+
+}
+
+
+/* =========================================================
+   VOCABULARY POPUP
+========================================================= */
+
+function showVocabularyPopup(
+    word,
+    anchor
+) {
+
+    const popup =
+        document.getElementById(
+            "vocabularyPopup"
+        );
+
+    if (!popup) {
+        return;
+    }
+
+    const normalized =
+        String(
+            word ||
+            ""
+        )
+        .trim();
+
+    const entry =
+        vocabulary[
+            normalized
+        ] ||
+        vocabulary[
+            normalized.toLowerCase()
+        ];
+
+    const title =
+        popup.querySelector(
+            ".vocabulary-popup-word"
+        );
+
+    const meaning =
+        popup.querySelector(
+            ".vocabulary-popup-meaning"
+        );
+
+    if (title) {
+
+        title.textContent =
+            normalized;
+
+    }
+
+    if (meaning) {
+
+        meaning.textContent =
+            entry
+                ? (
+                    typeof entry ===
+                    "string"
+                        ? entry
+                        : entry.meaning ||
+                          entry.definition ||
+                          ""
+                )
+                : "No definition available.";
+
+    }
+
+    popup.style.display =
         "block";
 
+    if (anchor) {
 
-    target.classList.add(
-        "active"
-    );
+        const rect =
+            anchor.getBoundingClientRect();
+
+        popup.style.position =
+            "fixed";
+
+        popup.style.left =
+            `${Math.min(
+                rect.left,
+                window.innerWidth -
+                320
+            )}px`;
+
+        popup.style.top =
+            `${Math.min(
+                rect.bottom + 8,
+                window.innerHeight -
+                180
+            )}px`;
+
+    }
+
+}
 
 
-    window.scrollTo(
-        0,
-        0
-    );
+/* =========================================================
+   CLOSE VOCABULARY POPUP
+========================================================= */
+
+function closeVocabularyPopup() {
+
+    const popup =
+        document.getElementById(
+            "vocabularyPopup"
+        );
+
+    if (popup) {
+
+        popup.style.display =
+            "none";
+
+    }
 
 }
 
@@ -6452,36 +5954,81 @@ function showScreen(id) {
    LOADING
 ========================================================= */
 
-function setLoading(
-    visible,
-    text
+function showLoading(
+    message
 ) {
+
+    let overlay =
+        document.getElementById(
+            "appLoadingOverlay"
+        );
+
+    if (!overlay) {
+
+        overlay =
+            document.createElement(
+                "div"
+            );
+
+        overlay.id =
+            "appLoadingOverlay";
+
+        overlay.innerHTML = `
+            <div class="app-loading-box">
+
+                <div class="loading-spinner">
+                </div>
+
+                <div class="loading-text">
+                    ${escapeHTML(
+                        message ||
+                        "Loading..."
+                    )}
+                </div>
+
+            </div>
+        `;
+
+        document.body.appendChild(
+            overlay
+        );
+
+    } else {
+
+        const text =
+            overlay.querySelector(
+                ".loading-text"
+            );
+
+        if (text) {
+
+            text.textContent =
+                message ||
+                "Loading...";
+
+        }
+
+    }
+
+    overlay.style.display =
+        "flex";
+
+}
+
+
+function hideLoading() {
 
     const overlay =
         document.getElementById(
-            "loadingOverlay"
+            "appLoadingOverlay"
         );
 
+    if (overlay) {
 
-    if (!overlay) {
-        return;
-    }
-
-
-    if (text) {
-
-        setText(
-            "loadingText",
-            text
-        );
+        overlay.style.display =
+            "none";
 
     }
-
-
-    overlay.style.display =
-        visible
-            ? "flex"
-            : "none";
 
 }
 
@@ -6490,50 +6037,49 @@ function setLoading(
    TOAST
 ========================================================= */
 
-let toastTimeout =
-    null;
-
-
 function showToast(
     message
 ) {
 
-    const toast =
+    let toast =
         document.getElementById(
-            "toast"
+            "appToast"
         );
-
 
     if (!toast) {
 
-        console.warn(
-            message
+        toast =
+            document.createElement(
+                "div"
+            );
+
+        toast.id =
+            "appToast";
+
+        document.body.appendChild(
+            toast
         );
 
-        return;
-
     }
-
 
     toast.textContent =
         message;
 
-
-    toast.style.display =
-        "block";
-
-
-    clearTimeout(
-        toastTimeout
+    toast.classList.add(
+        "show"
     );
 
+    clearTimeout(
+        toast._timer
+    );
 
-    toastTimeout =
+    toast._timer =
         setTimeout(
             function () {
 
-                toast.style.display =
-                    "none";
+                toast.classList.remove(
+                    "show"
+                );
 
             },
             3500
@@ -6543,94 +6089,981 @@ function showToast(
 
 
 /* =========================================================
-   TIME FORMAT
+   APPLICATION STYLES
+   ---------------------------------------------------------
+   Injected here so the new print button and controls
+   work even without changing style.css.
 ========================================================= */
 
-function formatTime(
-    seconds
-) {
+function injectApplicationStyles() {
 
-    seconds =
-        Math.max(
-            0,
-            Number(
-                seconds
-            ) || 0
+    if (
+        document.getElementById(
+            "ieltsAppInjectedStyles"
+        )
+    ) {
+
+        return;
+
+    }
+
+    const style =
+        document.createElement(
+            "style"
         );
 
+    style.id =
+        "ieltsAppInjectedStyles";
 
-    const minutes =
-        Math.floor(
-            seconds / 60
-        );
+    style.textContent = `
+
+        /* ================================================
+           ANSWER SELECT
+        ================================================ */
+
+        .answer-select {
+
+            width: 100%;
+
+            max-width: 240px;
+
+            min-height: 44px;
+
+            padding: 9px 38px 9px 13px;
+
+            border: 1px solid #d7dbe0;
+
+            border-radius: 10px;
+
+            background: #fff;
+
+            color: #222;
+
+            font-size: 15px;
+
+            cursor: pointer;
+
+            outline: none;
+
+            transition:
+                border-color .2s,
+                box-shadow .2s;
+
+        }
+
+        .answer-select:focus {
+
+            border-color: #383838;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(
+                    56,
+                    56,
+                    56,
+                    .10
+                );
+
+        }
 
 
-    const remaining =
-        seconds % 60;
+        /* ================================================
+           ANSWER INPUT
+        ================================================ */
+
+        .answer-input {
+
+            width: 100%;
+
+            max-width: 280px;
+
+            min-height: 44px;
+
+            padding: 9px 13px;
+
+            border: 1px solid #d7dbe0;
+
+            border-radius: 10px;
+
+            font-size: 15px;
+
+            outline: none;
+
+        }
+
+        .answer-input:focus {
+
+            border-color: #383838;
+
+            box-shadow:
+                0 0 0 3px
+                rgba(
+                    56,
+                    56,
+                    56,
+                    .10
+                );
+
+        }
 
 
-    return (
+        /* ================================================
+           QUESTION ITEM
+        ================================================ */
 
-        String(
-            minutes
-        ).padStart(
-            2,
-            "0"
-        )
+        .question-item {
 
-        +
+            display: grid;
 
-        ":"
+            grid-template-columns:
+                42px
+                minmax(
+                    0,
+                    1fr
+                )
+                minmax(
+                    170px,
+                    250px
+                );
 
-        +
+            gap: 12px;
 
-        String(
-            remaining
-        ).padStart(
-            2,
-            "0"
-        )
+            align-items: center;
 
+            padding: 14px 0;
+
+            border-bottom:
+                1px solid #eeeeee;
+
+        }
+
+        .question-number {
+
+            font-weight: 800;
+
+            color: #222;
+
+        }
+
+        .question-control {
+
+            width: 100%;
+
+        }
+
+
+        /* ================================================
+           QUESTION INSTRUCTIONS
+        ================================================ */
+
+        .question-instructions {
+
+            margin:
+                18px 0 8px;
+
+            padding:
+                14px 16px;
+
+            border-left:
+                4px solid #383838;
+
+            background:
+                #f6f6f7;
+
+            border-radius:
+                8px;
+
+            font-weight:
+                600;
+
+            line-height:
+                1.55;
+
+        }
+
+
+        /* ================================================
+           CHOICE OPTIONS
+        ================================================ */
+
+        .choice-option {
+
+            display: flex;
+
+            align-items: flex-start;
+
+            gap: 9px;
+
+            padding: 9px;
+
+            margin: 5px 0;
+
+            border:
+                1px solid #eeeeee;
+
+            border-radius:
+                8px;
+
+            cursor: pointer;
+
+            transition:
+                background .2s,
+                border-color .2s;
+
+        }
+
+        .choice-option:hover {
+
+            background:
+                #f7f7f7;
+
+            border-color:
+                #d0d0d0;
+
+        }
+
+        .choice-letter {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            min-width: 25px;
+
+            height: 25px;
+
+            border-radius: 50%;
+
+            background:
+                #383838;
+
+            color: white;
+
+            font-size: 12px;
+
+            font-weight: 700;
+
+        }
+
+
+        /* ================================================
+           QUESTION NAVIGATION
+        ================================================ */
+
+        .question-nav-button {
+
+            width: 36px;
+
+            height: 36px;
+
+            border-radius: 50%;
+
+            border:
+                1px solid #d9d9d9;
+
+            background: white;
+
+            cursor: pointer;
+
+            font-weight: 700;
+
+            margin: 3px;
+
+        }
+
+        .question-nav-button:hover {
+
+            transform:
+                translateY(-1px);
+
+        }
+
+        .question-nav-button.answered {
+
+            background:
+                #383838;
+
+            color: white;
+
+            border-color:
+                #383838;
+
+        }
+
+
+        /* ================================================
+           RESULT ACTIONS
+        ================================================ */
+
+        .result-actions {
+
+            display: flex;
+
+            flex-wrap: wrap;
+
+            justify-content: center;
+
+            align-items: center;
+
+            gap: 12px;
+
+            margin:
+                25px auto;
+
+        }
+
+
+        /* ================================================
+           BEAUTIFUL PRINT BUTTON
+        ================================================ */
+
+        .beautiful-print-button {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            gap: 10px;
+
+            min-width: 190px;
+
+            padding:
+                13px 22px;
+
+            border: none;
+
+            border-radius: 12px;
+
+            background:
+                linear-gradient(
+                    135deg,
+                    #383838,
+                    #202020
+                );
+
+            color: white;
+
+            font-size: 15px;
+
+            font-weight: 700;
+
+            letter-spacing:
+                .2px;
+
+            cursor: pointer;
+
+            box-shadow:
+                0 7px 18px
+                rgba(
+                    0,
+                    0,
+                    0,
+                    .18
+                );
+
+            transition:
+                transform .2s,
+                box-shadow .2s,
+                opacity .2s;
+
+        }
+
+        .beautiful-print-button:hover {
+
+            transform:
+                translateY(-2px);
+
+            box-shadow:
+                0 10px 24px
+                rgba(
+                    0,
+                    0,
+                    0,
+                    .23
+                );
+
+        }
+
+        .beautiful-print-button:active {
+
+            transform:
+                translateY(0);
+
+        }
+
+        .print-button-icon {
+
+            display: inline-flex;
+
+            align-items: center;
+
+            justify-content: center;
+
+            width: 28px;
+
+            height: 28px;
+
+            border-radius: 8px;
+
+            background:
+                rgba(
+                    255,
+                    255,
+                    255,
+                    .14
+                );
+
+            font-size: 16px;
+
+        }
+
+
+        /* ================================================
+           RESULT PART
+        ================================================ */
+
+        .result-part-card {
+
+            padding: 18px;
+
+            border:
+                1px solid #e5e5e5;
+
+            border-radius: 14px;
+
+            background: white;
+
+            text-align: center;
+
+        }
+
+        .result-part-number {
+
+            font-size: 12px;
+
+            color: #777;
+
+            font-weight: 700;
+
+            letter-spacing:
+                .8px;
+
+        }
+
+        .result-part-score {
+
+            margin-top: 7px;
+
+            font-size: 25px;
+
+            font-weight: 800;
+
+        }
+
+        .result-part-label {
+
+            margin-top: 4px;
+
+            font-size: 12px;
+
+            color: #777;
+
+        }
+
+
+        /* ================================================
+           REVIEW
+        ================================================ */
+
+        .review-item {
+
+            padding:
+                18px;
+
+            margin:
+                12px 0;
+
+            border:
+                1px solid #e5e5e5;
+
+            border-radius:
+                13px;
+
+            background:
+                white;
+
+        }
+
+        .review-item-header {
+
+            display: flex;
+
+            justify-content:
+                space-between;
+
+            gap: 10px;
+
+            margin-bottom:
+                10px;
+
+        }
+
+        .review-question-number {
+
+            font-weight:
+                800;
+
+        }
+
+        .review-part {
+
+            color:
+                #777;
+
+            font-size:
+                13px;
+
+        }
+
+        .review-question {
+
+            line-height:
+                1.55;
+
+            margin-bottom:
+                12px;
+
+        }
+
+        .review-answer-row {
+
+            display:
+                grid;
+
+            grid-template-columns:
+                1fr
+                1fr;
+
+            gap:
+                12px;
+
+        }
+
+        .review-your-answer,
+        .review-correct-answer {
+
+            padding:
+                12px;
+
+            border-radius:
+                9px;
+
+        }
+
+        .review-your-answer {
+
+            background:
+                #fff4f2;
+
+        }
+
+        .review-correct-answer {
+
+            background:
+                #effaf4;
+
+        }
+
+        .review-your-answer span,
+        .review-correct-answer span {
+
+            display:
+                block;
+
+            font-size:
+                11px;
+
+            text-transform:
+                uppercase;
+
+            color:
+                #777;
+
+            margin-bottom:
+                4px;
+
+        }
+
+
+        /* ================================================
+           ALL CORRECT
+        ================================================ */
+
+        .all-correct-message {
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            gap:
+                15px;
+
+            padding:
+                20px;
+
+            border-radius:
+                14px;
+
+            background:
+                #effaf4;
+
+            color:
+                #087443;
+
+        }
+
+        .all-correct-icon {
+
+            width:
+                44px;
+
+            height:
+                44px;
+
+            border-radius:
+                50%;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            background:
+                #087443;
+
+            color:
+                white;
+
+            font-weight:
+                800;
+
+            font-size:
+                22px;
+
+        }
+
+
+        /* ================================================
+           LOADING
+        ================================================ */
+
+        #appLoadingOverlay {
+
+            position:
+                fixed;
+
+            inset:
+                0;
+
+            z-index:
+                99999;
+
+            display:
+                flex;
+
+            align-items:
+                center;
+
+            justify-content:
+                center;
+
+            background:
+                rgba(
+                    255,
+                    255,
+                    255,
+                    .92
+                );
+
+        }
+
+        .app-loading-box {
+
+            text-align:
+                center;
+
+            padding:
+                30px;
+
+        }
+
+        .loading-spinner {
+
+            width:
+                42px;
+
+            height:
+                42px;
+
+            margin:
+                0 auto 14px;
+
+            border:
+                4px solid #ddd;
+
+            border-top-color:
+                #383838;
+
+            border-radius:
+                50%;
+
+            animation:
+                ieltsSpin
+                .8s
+                linear
+                infinite;
+
+        }
+
+        @keyframes ieltsSpin {
+
+            to {
+                transform:
+                    rotate(360deg);
+            }
+
+        }
+
+
+        /* ================================================
+           TOAST
+        ================================================ */
+
+        #appToast {
+
+            position:
+                fixed;
+
+            left:
+                50%;
+
+            bottom:
+                25px;
+
+            transform:
+                translate(
+                    -50%,
+                    20px
+                );
+
+            opacity:
+                0;
+
+            pointer-events:
+                none;
+
+            z-index:
+                99999;
+
+            background:
+                #222;
+
+            color:
+                white;
+
+            padding:
+                12px 18px;
+
+            border-radius:
+                10px;
+
+            font-size:
+                14px;
+
+            transition:
+                opacity .25s,
+                transform .25s;
+
+        }
+
+        #appToast.show {
+
+            opacity:
+                1;
+
+            transform:
+                translate(
+                    -50%,
+                    0
+                );
+
+        }
+
+
+        /* ================================================
+           TIMER
+        ================================================ */
+
+        .timer-warning {
+
+            color:
+                #b54708 !important;
+
+        }
+
+        .timer-danger {
+
+            color:
+                #b42318 !important;
+
+            font-weight:
+                800;
+
+        }
+
+
+        /* ================================================
+           MOBILE
+        ================================================ */
+
+        @media (
+            max-width: 700px
+        ) {
+
+            .question-item {
+
+                grid-template-columns:
+                    34px
+                    1fr;
+
+            }
+
+            .question-control {
+
+                grid-column:
+                    1 / -1;
+
+            }
+
+            .answer-select,
+            .answer-input {
+
+                max-width:
+                    100%;
+
+            }
+
+            .review-answer-row {
+
+                grid-template-columns:
+                    1fr;
+
+            }
+
+            .summary {
+
+                grid-template-columns:
+                    repeat(
+                        2,
+                        1fr
+                    );
+
+            }
+
+            .beautiful-print-button {
+
+                width:
+                    100%;
+
+            }
+
+        }
+
+    `;
+
+    document.head.appendChild(
+        style
     );
 
 }
 
 
 /* =========================================================
-   DATE FORMAT
+   SCROLL TEST PANELS
 ========================================================= */
 
-function formatDate(
-    date
+function scrollTestPanelsToTop() {
+
+    const passage =
+        document.getElementById(
+            "passageContent"
+        );
+
+    const questions =
+        document.getElementById(
+            "questionsContent"
+        );
+
+    if (passage) {
+        passage.scrollTop = 0;
+    }
+
+    if (questions) {
+        questions.scrollTop = 0;
+    }
+
+}
+
+
+/* =========================================================
+   FORMAT TIME
+========================================================= */
+
+function formatTime(
+    totalSeconds
 ) {
 
-    if (!date) {
-        return "";
-    }
-
-
-    try {
-
-        return new Intl.DateTimeFormat(
-            "en-US",
-            {
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-                hour: "2-digit",
-                minute: "2-digit"
-            }
-        ).format(
-            new Date(date)
+    const seconds =
+        Math.max(
+            0,
+            Number(
+                totalSeconds
+            ) || 0
         );
 
-    } catch (error) {
-
-        return String(
-            date
+    const minutes =
+        Math.floor(
+            seconds / 60
         );
 
-    }
+    const remaining =
+        seconds % 60;
+
+    return (
+        String(
+            minutes
+        ).padStart(
+            2,
+            "0"
+        ) +
+        ":" +
+        String(
+            remaining
+        ).padStart(
+            2,
+            "0"
+        )
+    );
 
 }
 
@@ -6649,13 +7082,13 @@ function setText(
             id
         );
 
-
-    if (element) {
-
-        element.textContent =
-            value ?? "";
-
+    if (!element) {
+        return;
     }
+
+    element.textContent =
+        value ??
+        "";
 
 }
 
@@ -6669,28 +7102,29 @@ function escapeHTML(
 ) {
 
     return String(
-        value ?? ""
+        value ??
+        ""
     )
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+    .replace(
+        /</g,
+        "&lt;"
+    )
+    .replace(
+        />/g,
+        "&gt;"
+    )
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+    .replace(
+        /'/g,
+        "&#039;"
+    );
 
 }
 
@@ -6711,973 +7145,5 @@ function escapeAttribute(
 
 
 /* =========================================================
-   ESCAPE REGEX
-========================================================= */
-
-function escapeRegExp(
-    value
-) {
-
-    return String(
-        value
-    ).replace(
-        /[.*+?^${}()|[\]\\]/g,
-        "\\$&"
-    );
-
-}
-
-
-/* =========================================================
-   DRAG/DROP STYLES
-========================================================= */
-
-function injectDragDropStyles() {
-
-    if (
-        document.getElementById(
-            "readingDragStyles"
-        )
-    ) {
-        return;
-    }
-
-
-    const style =
-        document.createElement(
-            "style"
-        );
-
-
-    style.id =
-        "readingDragStyles";
-
-
-    style.textContent = `
-
-        .summary-word-options {
-
-            display: flex;
-
-            flex-wrap: wrap;
-
-            gap: 8px;
-
-            margin:
-                12px 0 20px;
-
-        }
-
-
-        .summary-drag-word {
-
-            border:
-                1px solid #d0d0d0;
-
-            background:
-                #ffffff;
-
-            padding:
-                8px 13px;
-
-            border-radius:
-                8px;
-
-            cursor:
-                pointer;
-
-            font-size:
-                14px;
-
-        }
-
-
-        .summary-drag-word:hover {
-
-            transform:
-                translateY(-1px);
-
-        }
-
-
-        .summary-drag-word.selected {
-
-            outline:
-                3px solid
-                rgba(
-                    70,
-                    100,
-                    220,
-                    .25
-                );
-
-        }
-
-
-        .summary-drop-zone {
-
-            display:
-                inline-flex;
-
-            align-items:
-                center;
-
-            justify-content:
-                center;
-
-            min-width:
-                110px;
-
-            min-height:
-                34px;
-
-            margin:
-                0 4px;
-
-            padding:
-                4px 10px;
-
-            border:
-                2px dashed #aaa;
-
-            border-radius:
-                6px;
-
-            background:
-                #fafafa;
-
-            vertical-align:
-                middle;
-
-            cursor:
-                pointer;
-
-        }
-
-
-        .summary-drop-zone.drag-over {
-
-            border-color:
-                #333;
-
-        }
-
-
-        .summary-drop-zone.has-answer {
-
-            border-style:
-                solid;
-
-        }
-
-
-        .summary-drop-placeholder {
-
-            color:
-                #888;
-
-        }
-
-
-        .summary-drop-answer {
-
-            font-weight:
-                600;
-
-        }
-
-
-        .summary-fallback-row {
-
-            display:
-                flex;
-
-            align-items:
-                center;
-
-            gap:
-                10px;
-
-            margin:
-                10px 0;
-
-        }
-
-
-        .radio-options {
-
-            display:
-                flex;
-
-            flex-direction:
-                column;
-
-            gap:
-                8px;
-
-            margin-top:
-                10px;
-
-        }
-
-
-        .radio-option {
-
-            display:
-                flex;
-
-            align-items:
-                flex-start;
-
-            gap:
-                8px;
-
-            cursor:
-                pointer;
-
-        }
-
-
-        .radio-option input {
-
-            margin-top:
-                4px;
-
-        }
-
-
-        .answer-input,
-        .answer-select {
-
-            width:
-                100%;
-
-            max-width:
-                500px;
-
-            padding:
-                10px 12px;
-
-            border:
-                1px solid #ccc;
-
-            border-radius:
-                8px;
-
-            font-size:
-                15px;
-
-        }
-
-
-        .question-nav-item.answered {
-
-            font-weight:
-                700;
-
-        }
-
-    `;
-
-
-    document.head.appendChild(
-        style
-    );
-
-}
-
-
-/* =========================================================
-   RESULT STYLES
-========================================================= */
-
-function injectResultStyles() {
-
-    if (
-        document.getElementById(
-            "readingResultStyles"
-        )
-    ) {
-        return;
-    }
-
-
-    const style =
-        document.createElement(
-            "style"
-        );
-
-
-    style.id =
-        "readingResultStyles";
-
-
-    style.textContent = `
-
-        .reading-result-report {
-
-            width:
-                100%;
-
-        }
-
-
-        .results-page {
-
-            width:
-                100%;
-
-            max-width:
-                1100px;
-
-            margin:
-                0 auto;
-
-            padding:
-                20px;
-
-        }
-
-
-        .results-heading {
-
-            display:
-                flex;
-
-            justify-content:
-                space-between;
-
-            align-items:
-                flex-start;
-
-            gap:
-                20px;
-
-            margin-bottom:
-                25px;
-
-        }
-
-
-        .results-heading h1 {
-
-            margin:
-                0 0 6px;
-
-        }
-
-
-        .results-kicker {
-
-            font-size:
-                12px;
-
-            font-weight:
-                700;
-
-            letter-spacing:
-                .12em;
-
-            opacity:
-                .65;
-
-        }
-
-
-        .result-hero {
-
-            display:
-                flex;
-
-            align-items:
-                center;
-
-            gap:
-                30px;
-
-            padding:
-                25px;
-
-            border-radius:
-                18px;
-
-            background:
-                #f6f6f6;
-
-            margin-bottom:
-                20px;
-
-        }
-
-
-        .score-ring {
-
-            --score-percent: 0%;
-
-            width:
-                150px;
-
-            height:
-                150px;
-
-            border-radius:
-                50%;
-
-            display:
-                grid;
-
-            place-items:
-                center;
-
-            background:
-                conic-gradient(
-                    #222
-                    var(--score-percent),
-                    #ddd
-                    var(--score-percent)
-                );
-
-            flex:
-                0 0 auto;
-
-        }
-
-
-        .score-ring-inner {
-
-            width:
-                112px;
-
-            height:
-                112px;
-
-            border-radius:
-                50%;
-
-            background:
-                white;
-
-            display:
-                flex;
-
-            flex-direction:
-                column;
-
-            align-items:
-                center;
-
-            justify-content:
-                center;
-
-        }
-
-
-        .score-ring-inner strong {
-
-            font-size:
-                32px;
-
-        }
-
-
-        .score-ring-inner span {
-
-            opacity:
-                .6;
-
-        }
-
-
-        .status-pill {
-
-            display:
-                inline-block;
-
-            padding:
-                5px 10px;
-
-            border-radius:
-                999px;
-
-            background:
-                #e9e9e9;
-
-            font-size:
-                12px;
-
-            margin-bottom:
-                8px;
-
-        }
-
-
-        .result-summary {
-
-            display:
-                grid;
-
-            grid-template-columns:
-                repeat(
-                    4,
-                    1fr
-                );
-
-            gap:
-                12px;
-
-            margin:
-                20px 0;
-
-        }
-
-
-        .result-summary > div {
-
-            border:
-                1px solid #ddd;
-
-            border-radius:
-                12px;
-
-            padding:
-                18px;
-
-            text-align:
-                center;
-
-        }
-
-
-        .result-summary strong {
-
-            display:
-                block;
-
-            font-size:
-                26px;
-
-        }
-
-
-        .result-summary span {
-
-            opacity:
-                .65;
-
-            font-size:
-                13px;
-
-        }
-
-
-        .result-section {
-
-            margin-top:
-                25px;
-
-        }
-
-
-        .result-section-heading {
-
-            display:
-                flex;
-
-            justify-content:
-                space-between;
-
-            align-items:
-                center;
-
-            margin-bottom:
-                12px;
-
-        }
-
-
-        .part-score-grid {
-
-            display:
-                grid;
-
-            grid-template-columns:
-                repeat(
-                    auto-fit,
-                    minmax(
-                        180px,
-                        1fr
-                    )
-                );
-
-            gap:
-                12px;
-
-        }
-
-
-        .part-score-card {
-
-            border:
-                1px solid #ddd;
-
-            border-radius:
-                12px;
-
-            padding:
-                15px;
-
-        }
-
-
-        .part-score-title {
-
-            font-weight:
-                700;
-
-            margin-bottom:
-                5px;
-
-        }
-
-
-        .part-score-card strong {
-
-            font-size:
-                24px;
-
-        }
-
-
-        .part-score-card span {
-
-            display:
-                block;
-
-            opacity:
-                .65;
-
-            margin-top:
-                3px;
-
-        }
-
-
-        .part-score-bar {
-
-            height:
-                7px;
-
-            border-radius:
-                99px;
-
-            background:
-                #e5e5e5;
-
-            margin-top:
-                12px;
-
-            overflow:
-                hidden;
-
-        }
-
-
-        .part-score-bar span {
-
-            display:
-                block;
-
-            height:
-                100%;
-
-            background:
-                #222;
-
-        }
-
-
-        .review-grid {
-
-            display:
-                flex;
-
-            flex-direction:
-                column;
-
-            gap:
-                10px;
-
-        }
-
-
-        .review-item {
-
-            display:
-                grid;
-
-            grid-template-columns:
-                45px 35px 1fr;
-
-            gap:
-                10px;
-
-            align-items:
-                flex-start;
-
-            padding:
-                14px;
-
-            border:
-                1px solid #ddd;
-
-            border-radius:
-                10px;
-
-        }
-
-
-        .review-item.correct {
-
-            border-left:
-                5px solid #4caf50;
-
-        }
-
-
-        .review-item.incorrect {
-
-            border-left:
-                5px solid #e53935;
-
-        }
-
-
-        .review-item.unanswered {
-
-            border-left:
-                5px solid #999;
-
-        }
-
-
-        .review-number {
-
-            font-weight:
-                700;
-
-        }
-
-
-        .review-status {
-
-            font-weight:
-                800;
-
-        }
-
-
-        .review-answer,
-        .review-correct {
-
-            margin-top:
-                7px;
-
-            font-size:
-                13px;
-
-        }
-
-
-        .review-answer span,
-        .review-correct span {
-
-            opacity:
-                .65;
-
-        }
-
-
-        .legend {
-
-            display:
-                flex;
-
-            flex-wrap:
-                wrap;
-
-            gap:
-                15px;
-
-            margin-bottom:
-                15px;
-
-            font-size:
-                13px;
-
-        }
-
-
-        .legend-dot {
-
-            display:
-                inline-block;
-
-            width:
-                9px;
-
-            height:
-                9px;
-
-            border-radius:
-                50%;
-
-            margin-right:
-                5px;
-
-        }
-
-
-        .legend-dot.correct {
-
-            background:
-                #4caf50;
-
-        }
-
-
-        .legend-dot.incorrect {
-
-            background:
-                #e53935;
-
-        }
-
-
-        .legend-dot.unanswered {
-
-            background:
-                #999;
-
-        }
-
-
-        .results-actions {
-
-            display:
-                flex;
-
-            flex-wrap:
-                wrap;
-
-            gap:
-                10px;
-
-            margin-top:
-                30px;
-
-        }
-
-
-        @media (
-            max-width: 700px
-        ) {
-
-            .result-hero {
-
-                flex-direction:
-                    column;
-
-                text-align:
-                    center;
-
-            }
-
-
-            .result-summary {
-
-                grid-template-columns:
-                    repeat(
-                        2,
-                        1fr
-                    );
-
-            }
-
-
-            .results-heading {
-
-                flex-direction:
-                    column;
-
-            }
-
-
-            .review-item {
-
-                grid-template-columns:
-                    35px 25px 1fr;
-
-            }
-
-        }
-
-
-        @media print {
-
-            .print-score-button,
-            .results-actions {
-
-                display:
-                    none !important;
-
-            }
-
-        }
-
-    `;
-
-
-    document.head.appendChild(
-        style
-    );
-
-}
-
-
-/* =========================================================
-   GLOBAL ERROR HANDLER
-   ---------------------------------------------------------
-   If something unexpected happens, don't leave a blank
-   page. Show the dashboard and log the error.
-========================================================= */
-
-window.addEventListener(
-    "error",
-    function (event) {
-
-        console.error(
-            "IELTS Reading error:",
-            event.error ||
-            event.message
-        );
-
-    }
-);
-
-
-window.addEventListener(
-    "unhandledrejection",
-    function (event) {
-
-        console.error(
-            "IELTS Reading promise error:",
-            event.reason
-        );
-
-    }
-);
-
-
-/* =========================================================
-   END
+   END OF app.js
 ========================================================= */
