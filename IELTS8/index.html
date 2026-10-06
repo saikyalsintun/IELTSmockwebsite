@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>IELTS Listening Practice</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <b>IELTS Listening</b>
+  <span>Listening Practice Test</span>
+  <strong id="timer">30:00</strong>
+</header>
+
+<nav id="parts">
+  <button class="active" data-p="1">Part 1</button>
+  <button data-p="2">Part 2</button>
+  <button data-p="3">Part 3</button>
+  <button data-p="4">Part 4</button>
+</nav>
+
+<div class="layout">
+  <aside>
+    <h3>Questions</h3>
+    <div id="nav"></div>
+  </aside>
+
+  <main>
+    <div class="audio">
+      <b id="audioTitle">Part 1 Audio</b>
+      <audio id="player" controls></audio>
+      <label>Choose audio
+        <input id="audioFile" type="file" accept="audio/*">
+      </label>
+    </div>
+    <div id="content"></div>
+  </main>
+</div>
+
+<footer>
+  <span><b id="count">0</b> / 40 answered</span>
+  <button id="finish">Finish Test</button>
+</footer>
+
+<div id="modal" class="modal hide">
+  <div class="box">
+    <h2>Finish test?</h2>
+    <p>Unanswered or incomplete questions will be marked incorrect.</p>
+    <div class="modal-actions">
+      <button id="cancel" type="button">Continue Test</button>
+      <button id="confirm" class="primary" type="button">Finish Test</button>
+    </div>
+  </div>
+</div>
+
+<section id="results" class="hide">
+  <div class="resultsWrap">
+    <div class="resultHead">
+      <div>
+        <small>IELTS LISTENING PRACTICE</small>
+        <h1>Test Results</h1>
+        <p>Your test has been marked automatically.</p>
+      </div>
+      <div class="score">
+        <b id="score">0/40</b>
+        <span>Estimated Band</span>
+        <strong id="band">0.0</strong>
+      </div>
+    </div>
+
+    <div class="summary">
+      <div>Correct<strong id="correct">0</strong></div>
+      <div>Incorrect<strong id="wrong">0</strong></div>
+      <div>Unanswered<strong id="unanswered">0</strong></div>
+      <div>Accuracy<strong id="accuracy">0%</strong></div>
+    </div>
+<div class="actions">
+      <button id="print">Print / Save PDF</button>
+      <button class="primary" id="restart">Start Again</button>
+    </div>
+    <br>
+    <div class="panel">
+      <h2>Part Scores</h2>
+      <div id="partScores" class="partscores"></div>
+    </div>
+
+    <div class="panel">
+      <div class="reviewHead">
+        <div>
+          <h2>Question Review</h2>
+          <p>Check your answers and the correct answers.</p>
+        </div>
+        <div>
+          <button class="filter active" data-f="all">All</button>
+          <button class="filter" data-f="wrong">Wrong</button>
+        </div>
+      </div>
+      <div id="review"></div>
+    </div>
+
+    
+  </div>
+</section>
+
+<script src="script.js"></script>
+</body>
+</html>
