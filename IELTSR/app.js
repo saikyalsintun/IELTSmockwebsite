@@ -1,422 +1,360 @@
 /* =========================================================
    IELTS READING PRACTICE
    COMPLETE LOCAL-STORAGE app.js
+   ---------------------------------------------------------
+   NO LOGIN
+   NO API
+   NO GOOGLE SHEETS
+   NO TEACHER / ADMIN
+   NO ONLINE ANSWER STORAGE
+
+   Supports:
+   - true_false_not_given
+   - yes_no_not_given
+   - fill_blank
+   - summary_completion
+   - multiple_choice
+   - multiple_choice_multiple
+   - matching_headings
+   - matching_information
+   - matching_features
+   - answer_box
+   - drag & drop
+   - mobile click-to-place
+   - localStorage
+   - 60 minute timer
+   - question navigator
+   - IELTS Reading band
+   - result review
+   - print / Save as PDF
 ========================================================= */
 
-const CONFIG={
-    TEST_COUNT:8,
-    TEST_FOLDER:"./tests/",
-    VOCABULARY_FILE:"./vocabulary.json",
-    DEFAULT_DURATION:60
-};
-
-let currentTest=null;
-let currentTestNumber=null;
-let currentPartIndex=0;
-let studentAnswers={};
-let submittedAnswers={};
-let vocabulary={};
-let timerInterval=null;
-let remainingSeconds=0;
-let testStartTime=null;
-let testElapsedSeconds=0;
-let testStarted=false;
-let testSubmitted=false;
-let scoreData=null;
-let selectedDragOption=null;
+"use strict";
 
 /* =========================================================
-   START
+   CONFIG
 ========================================================= */
 
-window.addEventListener("DOMContentLoaded",async()=>{
+const CONFIG = {
+    TEST_COUNT: 8,
+    TEST_FOLDER: "./tests/",
+    VOCABULARY_FILE: "./vocabulary.json",
+    DEFAULT_DURATION: 60,
+    STORAGE_PREFIX: "ieltsReading_"
+};
+
+/* =========================================================
+   GLOBAL STATE
+========================================================= */
+
+let currentTest = null;
+let currentTestNumber = null;
+let currentPartIndex = 0;
+
+let studentAnswers = {};
+let submittedAnswers = {};
+
+let vocabulary = {};
+
+let timerInterval = null;
+let remainingSeconds = 0;
+let testElapsedSeconds = 0;
+let testStartTime = null;
+
+let testStarted = false;
+let testSubmitted = false;
+
+let scoreData = null;
+
+let selectedDragOption = null;
+
+/* =========================================================
+   DOM READY
+========================================================= */
+
+document.addEventListener("DOMContentLoaded", async () => {
     injectStyles();
     setupEvents();
     await loadVocabulary();
-    removeAdminElements();
-    showDashboard();
+    renderTestCards();
 });
 
 /* =========================================================
-   HELPERS
+   BASIC HELPERS
 ========================================================= */
 
-function $(id){
+function $(id) {
     return document.getElementById(id);
 }
 
-function setText(id,value){
-    const el=$(id);
-    if(el) el.textContent=value??"";
+function setText(id, value) {
+    const el = $(id);
+    if (el) el.textContent = value ?? "";
 }
 
-function showScreen(id){
-    document.querySelectorAll(".screen").forEach(el=>{
-        el.classList.remove("active");
-        el.style.display="none";
-    });
-
-    const el=$(id);
-
-    if(el){
-        el.classList.add("active");
-        el.style.display="";
-    }
+function addClick(id, fn) {
+    const el = $(id);
+    if (el) el.addEventListener("click", fn);
 }
 
-function escapeHTML(value){
-    if(value===null||value===undefined)return "";
-
-    if(typeof value==="object"){
-        return displayValue(value);
-    }
-
-    return String(value)
-        .replace(/&/g,"&amp;")
-        .replace(/</g,"&lt;")
-        .replace(/>/g,"&gt;")
-        .replace(/"/g,"&quot;")
-        .replace(/'/g,"&#039;");
+function escapeHTML(value) {
+    return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 }
 
-function escapeAttr(value){
+function escapeAttr(value) {
     return escapeHTML(value);
 }
 
-function escapeRegExp(value){
-    return String(value).replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-}
+function normalizeAnswer(value) {
+    if (value === undefined || value === null) return "";
 
-function normalize(value){
-    return String(value??"")
+    if (typeof value === "object") {
+        if (value.letter !== undefined) {
+            return String(value.letter).trim().toLowerCase();
+        }
+
+        if (value.text !== undefined) {
+            return String(value.text).trim().toLowerCase();
+        }
+
+        if (value.value !== undefined) {
+            return String(value.value).trim().toLowerCase();
+        }
+
+        return JSON.stringify(value)
+            .trim()
+            .toLowerCase();
+    }
+
+    return String(value)
         .trim()
-        .replace(/\s+/g," ")
+        .replace(/\s+/g, " ")
         .toLowerCase();
 }
 
-/* =========================================================
-   OBJECT / JSON VALUE HANDLING
-========================================================= */
+function formatTime(seconds) {
+    seconds = Math.max(0, Number(seconds) || 0);
 
-function displayValue(value){
+    const min = Math.floor(seconds / 60);
+    const sec = seconds % 60;
 
-    if(value===null||value===undefined){
-        return "";
-    }
-
-    if(
-        typeof value==="string"||
-        typeof value==="number"||
-        typeof value==="boolean"
-    ){
-        return escapeHTML(String(value));
-    }
-
-    if(Array.isArray(value)){
-        return value
-            .map(x=>displayValue(x))
-            .filter(Boolean)
-            .join(", ");
-    }
-
-    if(typeof value==="object"){
-
-        const keys=[
-            "text",
-            "label",
-            "value",
-            "name",
-            "title",
-            "heading",
-            "option",
-            "answer",
-            "content",
-            "word",
-            "phrase",
-            "description"
-        ];
-
-        for(const key of keys){
-            if(
-                value[key]!==undefined &&
-                value[key]!==null
-            ){
-                return displayValue(value[key]);
-            }
-        }
-
-        const objectKeys=Object.keys(value);
-
-        if(objectKeys.length===1){
-            return displayValue(value[objectKeys[0]]);
-        }
-
-        return objectKeys
-            .map(key=>displayValue(value[key]))
-            .filter(Boolean)
-            .join(" ");
-    }
-
-    return escapeHTML(String(value));
+    return String(min).padStart(2, "0") +
+        ":" +
+        String(sec).padStart(2, "0");
 }
 
-function getOptionValue(option){
+function showToast(message) {
+    let toast = $("appToast");
 
-    if(option===null||option===undefined){
-        return "";
+    if (!toast) {
+        toast = document.createElement("div");
+        toast.id = "appToast";
+
+        Object.assign(toast.style, {
+            position: "fixed",
+            left: "50%",
+            bottom: "30px",
+            transform: "translateX(-50%)",
+            zIndex: "99999",
+            padding: "12px 20px",
+            borderRadius: "10px",
+            background: "#222",
+            color: "#fff",
+            fontSize: "14px",
+            boxShadow: "0 8px 30px rgba(0,0,0,.25)"
+        });
+
+        document.body.appendChild(toast);
     }
 
-    if(
-        typeof option==="string"||
-        typeof option==="number"||
-        typeof option==="boolean"
-    ){
-        return String(option);
-    }
+    toast.textContent = message;
+    toast.style.display = "block";
 
-    if(typeof option==="object"){
+    clearTimeout(toast._timer);
 
-        return String(
-            option.value??
-            option.id??
-            option.key??
-            option.text??
-            option.label??
-            option.name??
-            option.heading??
-            option.answer??
-            option.word??
-            ""
-        );
-    }
-
-    return String(option);
+    toast._timer = setTimeout(() => {
+        toast.style.display = "none";
+    }, 2500);
 }
 
-function getOptionLabel(option){
+function showScreen(id) {
+    document.querySelectorAll(".screen").forEach(screen => {
+        screen.style.display = "none";
+        screen.classList.remove("active");
+    });
 
-    if(option===null||option===undefined){
-        return "";
+    const target = $(id);
+
+    if (target) {
+        target.style.display = "";
+        target.classList.add("active");
     }
-
-    if(
-        typeof option==="string"||
-        typeof option==="number"||
-        typeof option==="boolean"
-    ){
-        return escapeHTML(option);
-    }
-
-    if(typeof option==="object"){
-
-        return displayValue(
-            option.text??
-            option.label??
-            option.name??
-            option.heading??
-            option.title??
-            option.value??
-            option.option??
-            option.answer??
-            option.content??
-            option.word??
-            option
-        );
-    }
-
-    return escapeHTML(option);
-}
-
-function formatAnswer(value){
-
-    if(
-        value===undefined||
-        value===null||
-        value===""
-    ){
-        return "—";
-    }
-
-    if(Array.isArray(value)){
-        return value
-            .map(x=>displayValue(x))
-            .join(", ");
-    }
-
-    return displayValue(value);
-}
-
-/* =========================================================
-   TIME
-========================================================= */
-
-function formatTime(seconds){
-    seconds=Math.max(0,Number(seconds)||0);
-
-    const minutes=Math.floor(seconds/60);
-    const secs=seconds%60;
-
-    return `${String(minutes).padStart(2,"0")}:${String(secs).padStart(2,"0")}`;
-}
-
-function calculateTimeUsed(){
-
-    if(!testStartTime){
-        return 0;
-    }
-
-    const total=
-        (Number(currentTest?.duration)||CONFIG.DEFAULT_DURATION)*60;
-
-    return Math.min(
-        total,
-        Math.max(
-            0,
-            Math.floor((Date.now()-testStartTime)/1000)
-        )
-    );
 }
 
 /* =========================================================
    EVENTS
 ========================================================= */
 
-function setupEvents(){
+function setupEvents() {
 
-    const events={
-        startTestButton:startTest,
-        backToDashboardButton:showDashboard,
-        testBackButton:confirmExitTest,
-        submitTestButton:confirmSubmitTest,
-        previousPartButton:previousPart,
-        nextPartButton:nextPart,
-        returnDashboardButton:showDashboard,
-        retakeTestButton:()=>currentTest&&startTest(),
-        closeVocabularyPopup:closeVocabularyPopup,
-        closeConfirmModal:closeConfirmModal,
-        cancelSubmitButton:closeConfirmModal,
-        confirmSubmitButton:submitTest
-    };
+    addClick("startTestButton", startTest);
+    addClick("startExamButton", startTest);
 
-    Object.entries(events).forEach(([id,fn])=>{
-        const el=$(id);
-        if(el)el.addEventListener("click",fn);
-    });
+    addClick("previousPartButton", previousPart);
+    addClick("nextPartButton", nextPart);
 
-    document.addEventListener("input",e=>{
-        if(
-            e.target.matches(
-                "input[data-question-number],textarea[data-question-number]"
-            )
-        ){
-            saveAnswerFromElement(e.target);
+    addClick("submitTestButton", confirmSubmitTest);
+    addClick("confirmSubmitButton", submitTest);
+    addClick("cancelSubmitButton", closeConfirmModal);
+
+    addClick("backToDashboardButton", backToDashboard);
+    addClick("returnDashboardButton", backToDashboard);
+    addClick("backDashboard", backToDashboard);
+
+    addClick("retakeTestButton", restartCurrentTest);
+    addClick("startAgainButton", restartCurrentTest);
+
+    addClick("printResultButton", printScorePDF);
+    addClick("printScoreButton", printScorePDF);
+
+    document.addEventListener("click", event => {
+
+        const testCard = event.target.closest("[data-test-number]");
+
+        if (
+            testCard &&
+            !event.target.closest("button, a, input, select")
+        ) {
+            const number = Number(
+                testCard.dataset.testNumber
+            );
+
+            if (number) {
+                openTest(number);
+            }
+        }
+
+        const navButton =
+            event.target.closest("[data-question-nav]");
+
+        if (navButton) {
+            const number = Number(
+                navButton.dataset.questionNav
+            );
+
+            jumpToQuestion(number);
+        }
+
+        const dragOption =
+            event.target.closest(".drag-option, .summary-drag-word");
+
+        if (dragOption) {
+            selectDragOption(dragOption);
+        }
+
+        const removeButton =
+            event.target.closest(".remove-dropped-answer");
+
+        if (removeButton) {
+            removeDroppedAnswer(removeButton);
         }
     });
 
-    document.addEventListener("change",e=>{
-        if(
-            e.target.matches(
-                "select[data-question-number],input[type=radio][data-question-number],input[type=checkbox][data-question-number]"
+    document.addEventListener("input", event => {
+        const input = event.target;
+
+        if (
+            input.matches(
+                "input[data-question-number], textarea[data-question-number]"
             )
-        ){
-            saveAnswerFromElement(e.target);
+        ) {
+            saveInputAnswer(input);
+        }
+    });
+
+    document.addEventListener("change", event => {
+        const input = event.target;
+
+        if (
+            input.matches(
+                "select[data-question-number], input[data-question-number]"
+            )
+        ) {
+            saveInputAnswer(input);
         }
     });
 }
 
 /* =========================================================
-   REMOVE ADMIN / LOGIN
+   TEST LIST
 ========================================================= */
 
-function removeAdminElements(){
+async function renderTestCards() {
 
-    [
-        "teacherAdminButton",
-        "adminButton",
-        "teacherButton",
-        "teacherAdminLink",
-        "adminLink",
-        "teacherLink",
-        "teacherAdmin",
-        "adminPanelButton",
-        "loginButton",
-        "logoutButton"
-    ].forEach(id=>{
-        const el=$(id);
-        if(el)el.remove();
-    });
+    const box =
+        $("testCards") ||
+        $("testsContainer") ||
+        $("testList");
 
-    document.querySelectorAll("button,a").forEach(el=>{
-        const text=normalize(el.textContent);
+    if (!box) return;
 
-        if([
-            "teacher",
-            "admin",
-            "teacher admin",
-            "teacher/admin",
-            "login",
-            "log in",
-            "logout",
-            "log out"
-        ].includes(text)){
-            el.remove();
+    box.innerHTML = "";
+
+    let found = 0;
+
+    for (let i = 1; i <= CONFIG.TEST_COUNT; i++) {
+
+        try {
+
+            const response = await fetch(
+                `${CONFIG.TEST_FOLDER}Test${i}.json?${Date.now()}`,
+                { cache: "no-store" }
+            );
+
+            if (!response.ok) continue;
+
+            found++;
+
+            const card = document.createElement("div");
+
+            card.className = "test-card";
+            card.dataset.testNumber = i;
+
+            card.innerHTML = `
+                <div class="test-card-number">TEST ${i}</div>
+                <h3>IELTS Reading Test ${i}</h3>
+                <div class="test-card-info">
+                    <span>60 minutes</span>
+                    <span>40 questions</span>
+                </div>
+                <button type="button" class="test-card-button">
+                    Start Test
+                </button>
+            `;
+
+            card.querySelector("button").addEventListener(
+                "click",
+                () => openTest(i)
+            );
+
+            box.appendChild(card);
+
+        } catch (error) {
+            console.warn(`Test ${i} unavailable`, error);
         }
-    });
-}
+    }
 
-/* =========================================================
-   DASHBOARD
-========================================================= */
-
-function showDashboard(){
-
-    stopTimer();
-
-    testStarted=false;
-    testSubmitted=false;
-
-    showScreen("dashboardScreen");
-
-    renderTestCards();
-}
-
-function renderTestCards(){
-
-    const box=$("testCards");
-
-    if(!box)return;
-
-    box.innerHTML="";
-
-    for(let i=1;i<=CONFIG.TEST_COUNT;i++){
-
-        const card=document.createElement("div");
-
-        card.className="test-card";
-
-        card.innerHTML=`
-            <div class="test-card-number">
-                Test ${i}
-            </div>
-
-            <h3>
-                IELTS Reading Test ${i}
-            </h3>
-
-            <div class="test-card-info">
-                <span>
-                    ${CONFIG.DEFAULT_DURATION} minutes
-                </span>
-
-                <span>
-                    40 questions
-                </span>
+    if (!found) {
+        box.innerHTML = `
+            <div class="empty-tests">
+                No IELTS Reading tests were found.
             </div>
         `;
-
-        card.onclick=()=>openTest(i);
-
-        box.appendChild(card);
     }
 }
 
@@ -424,94 +362,87 @@ function renderTestCards(){
    LOAD TEST
 ========================================================= */
 
-async function openTest(number){
+async function openTest(testNumber) {
 
-    try{
+    try {
 
-        const response=await fetch(
-            `${CONFIG.TEST_FOLDER}Test${number}.json?${Date.now()}`,
-            {cache:"no-store"}
+        const response = await fetch(
+            `${CONFIG.TEST_FOLDER}Test${testNumber}.json?${Date.now()}`,
+            { cache: "no-store" }
         );
 
-        if(!response.ok){
+        if (!response.ok) {
             throw new Error(
-                `Test${number}.json could not be loaded.`
+                `Test${testNumber}.json could not be loaded.`
             );
         }
 
-        const data=await response.json();
+        const data = await response.json();
 
         validateTest(data);
 
-        currentTest=data;
-        currentTestNumber=number;
-        currentPartIndex=0;
+        currentTest = data;
+        currentTestNumber = testNumber;
 
-        studentAnswers={};
-        submittedAnswers={};
-        scoreData=null;
-        testSubmitted=false;
+        currentPartIndex = 0;
 
-        loadSavedAnswers();
+        studentAnswers = loadSavedAnswers();
+
+        submittedAnswers = {};
+
+        testStarted = false;
+        testSubmitted = false;
 
         showTestIntroduction();
 
-    }catch(error){
+    } catch (error) {
 
         console.error(error);
 
-        alert(
-            `Unable to load Test ${number}.\n\n`+
-            `${error.message}\n\n`+
-            `Please make sure tests/Test${number}.json exists.`
+        showToast(
+            error.message ||
+            "Could not load the test."
         );
     }
 }
 
-function validateTest(test){
+/* =========================================================
+   VALIDATE TEST
+========================================================= */
 
-    if(
-        !test||
-        !Array.isArray(test.parts)
-    ){
+function validateTest(test) {
+
+    if (
+        !test ||
+        !Array.isArray(test.parts) ||
+        !test.parts.length
+    ) {
         throw new Error("Invalid test JSON.");
     }
 
-    test.parts.forEach(part=>{
+    test.parts.forEach(part => {
 
-        if(!part.passage){
-            part.passage={};
+        if (!part.passage) {
+            part.passage = {
+                title: "",
+                paragraphs: []
+            };
         }
 
-        if(!Array.isArray(part.passage.paragraphs)){
-
-            if(typeof part.passage.text==="string"){
-
-                part.passage.paragraphs=[
-                    {
-                        id:"",
-                        text:part.passage.text
-                    }
-                ];
-
-            }else{
-                part.passage.paragraphs=[];
-            }
+        if (!Array.isArray(part.questionGroups)) {
+            part.questionGroups = [];
         }
 
-        if(!Array.isArray(part.questionGroups)){
-            part.questionGroups=[];
-        }
+        part.questionGroups.forEach(group => {
 
-        part.questionGroups.forEach(group=>{
-
-            if(!Array.isArray(group.questions)){
-                group.questions=[];
+            if (!Array.isArray(group.questions)) {
+                group.questions = [];
             }
 
-            if(!Array.isArray(group.blanks)){
-                group.blanks=[];
+            if (!Array.isArray(group.blanks)) {
+                group.blanks = [];
             }
+
         });
     });
 }
@@ -520,25 +451,25 @@ function validateTest(test){
    INTRO
 ========================================================= */
 
-function showTestIntroduction(){
+function showTestIntroduction() {
 
     showScreen("introScreen");
 
     setText(
         "introTestNumber",
-        currentTest.testId||
+        currentTest.testId ||
         `Test ${currentTestNumber}`
     );
 
     setText(
         "introTitle",
-        currentTest.title||
+        currentTest.title ||
         `IELTS Reading Test ${currentTestNumber}`
     );
 
     setText(
         "introDuration",
-        `${currentTest.duration||CONFIG.DEFAULT_DURATION} minutes`
+        `${currentTest.duration || CONFIG.DEFAULT_DURATION} minutes`
     );
 
     setText(
@@ -553,27 +484,27 @@ function showTestIntroduction(){
 }
 
 /* =========================================================
-   START TEST
+   START
 ========================================================= */
 
-function startTest(){
+function startTest() {
 
-    if(!currentTest)return;
+    if (!currentTest) return;
 
-    studentAnswers={};
+    testStarted = true;
+    testSubmitted = false;
 
-    loadSavedAnswers();
+    currentPartIndex = 0;
 
-    currentPartIndex=0;
-    testStarted=true;
-    testSubmitted=false;
+    testStartTime = Date.now();
 
-    testStartTime=Date.now();
+    testElapsedSeconds = 0;
 
-    remainingSeconds=
-        (Number(currentTest.duration)||CONFIG.DEFAULT_DURATION)*60;
-
-    testElapsedSeconds=0;
+    remainingSeconds =
+        (
+            Number(currentTest.duration) ||
+            CONFIG.DEFAULT_DURATION
+        ) * 60;
 
     showScreen("testScreen");
 
@@ -586,107 +517,117 @@ function startTest(){
    TIMER
 ========================================================= */
 
-function startTimer(){
+function startTimer() {
 
     stopTimer();
 
-    updateTimer();
+    updateTimerDisplay();
 
-    timerInterval=setInterval(()=>{
+    timerInterval = setInterval(() => {
 
         remainingSeconds--;
 
-        updateTimer();
+        testElapsedSeconds =
+            Math.floor(
+                (Date.now() - testStartTime) / 1000
+            );
 
-        if(remainingSeconds<=0){
+        updateTimerDisplay();
 
-            remainingSeconds=0;
+        if (remainingSeconds <= 0) {
+
+            remainingSeconds = 0;
 
             stopTimer();
 
             autoSubmitTest();
         }
 
-    },1000);
+    }, 1000);
 }
 
-function stopTimer(){
+function stopTimer() {
 
-    if(timerInterval){
-
+    if (timerInterval) {
         clearInterval(timerInterval);
-
-        timerInterval=null;
+        timerInterval = null;
     }
 }
 
-function updateTimer(){
+function updateTimerDisplay() {
 
-    [
+    const ids = [
         "timer",
         "timerDisplay",
         "testTimer"
-    ].some(id=>{
+    ];
 
-        const el=$(id);
+    for (const id of ids) {
 
-        if(!el)return false;
+        const element = $(id);
 
-        el.textContent=
-            formatTime(remainingSeconds);
+        if (element) {
 
-        if(remainingSeconds<=300){
-            el.classList.add("timer-warning");
-        }else{
-            el.classList.remove("timer-warning");
+            element.textContent =
+                formatTime(remainingSeconds);
+
+            if (remainingSeconds <= 300) {
+                element.classList.add("timer-warning");
+            } else {
+                element.classList.remove("timer-warning");
+            }
+
+            break;
         }
-
-        return true;
-    });
+    }
 }
 
 /* =========================================================
-   CURRENT PART
+   PART RENDERING
 ========================================================= */
 
-function renderCurrentPart(){
+function renderCurrentPart() {
 
-    if(!currentTest)return;
+    if (!currentTest) return;
 
-    const part=
+    const part =
         currentTest.parts[currentPartIndex];
 
-    if(!part)return;
+    if (!part) return;
+
+    const partNumber =
+        part.partNumber ||
+        currentPartIndex + 1;
 
     setText(
         "testHeaderTitle",
-        currentTest.title||
+        currentTest.title ||
         `IELTS Reading Test ${currentTestNumber}`
     );
 
     setText(
         "testHeaderPart",
-        `Part ${part.partNumber||currentPartIndex+1}`
+        `Part ${partNumber}`
     );
 
     setText(
         "passagePartLabel",
-        `Part ${part.partNumber||currentPartIndex+1}`
+        `Part ${partNumber}`
     );
 
     setText(
         "passageTitle",
-        getPlainText(part.passage.title||"")
+        part.passage.title || ""
     );
 
     setText(
         "questionsPartLabel",
-        `Questions ${questionRange(part)}`
+        `Questions ${questionRangeForPart(part)}`
     );
 
     setText(
         "partIndicator",
-        `Part ${currentPartIndex+1} of ${currentTest.parts.length}`
+        `Part ${currentPartIndex + 1} of ${currentTest.parts.length}`
     );
 
     renderPassage(part.passage);
@@ -697,445 +638,431 @@ function renderCurrentPart(){
 
     updatePartButtons();
 
-    window.scrollTo({
-        top:0,
-        behavior:"smooth"
-    });
-}
+    restoreAnswersToDOM();
 
-function getPlainText(value){
-
-    if(value===null||value===undefined){
-        return "";
-    }
-
-    if(
-        typeof value==="string"||
-        typeof value==="number"
-    ){
-        return String(value);
-    }
-
-    if(Array.isArray(value)){
-        return value.map(getPlainText).join(", ");
-    }
-
-    if(typeof value==="object"){
-
-        return String(
-            value.text??
-            value.label??
-            value.title??
-            value.name??
-            value.value??
-            ""
-        );
-    }
-
-    return String(value);
+    scrollPanelsTop();
 }
 
 /* =========================================================
-   QUESTION NUMBERS
+   QUESTION NUMBER COLLECTION
+   IMPORTANT:
+   includes questions AND blanks
 ========================================================= */
 
-function getPartQuestionNumbers(part){
+function getPartQuestionNumbers(part) {
 
-    const numbers=[];
+    const numbers = [];
 
-    (part.questionGroups||[]).forEach(group=>{
+    (part.questionGroups || []).forEach(group => {
 
-        (group.questions||[]).forEach(q=>{
+        (group.questions || []).forEach(question => {
 
-            if(Number.isFinite(Number(q.number))){
-                numbers.push(Number(q.number));
+            const n = Number(question.number);
+
+            if (Number.isFinite(n)) {
+                numbers.push(n);
             }
         });
 
-        (group.blanks||[]).forEach(q=>{
+        (group.blanks || []).forEach(blank => {
 
-            if(Number.isFinite(Number(q.number))){
-                numbers.push(Number(q.number));
+            const n = Number(blank.number);
+
+            if (Number.isFinite(n)) {
+                numbers.push(n);
             }
         });
     });
 
-    return [...new Set(numbers)]
-        .sort((a,b)=>a-b);
+    return [...new Set(numbers)].sort((a, b) => a - b);
 }
 
-function questionRange(part){
+function getAllQuestionNumbers() {
 
-    const numbers=
+    const numbers = [];
+
+    (currentTest?.parts || []).forEach(part => {
+        numbers.push(
+            ...getPartQuestionNumbers(part)
+        );
+    });
+
+    return [...new Set(numbers)].sort((a, b) => a - b);
+}
+
+function countTotalQuestions() {
+    return getAllQuestionNumbers().length;
+}
+
+function questionRangeForPart(part) {
+
+    const numbers =
         getPartQuestionNumbers(part);
 
-    if(!numbers.length){
-        return "";
-    }
+    if (!numbers.length) return "";
 
-    if(numbers.length===1){
-        return numbers[0];
-    }
-
-    return `${numbers[0]}-${numbers[numbers.length-1]}`;
+    return `${numbers[0]}-${numbers[numbers.length - 1]}`;
 }
 
 /* =========================================================
    PASSAGE
 ========================================================= */
 
-function renderPassage(passage){
+function renderPassage(passage) {
 
-    const box=$("passageContent");
+    const box =
+        $("passageContent") ||
+        $("passage");
 
-    if(!box)return;
+    if (!box) return;
 
-    box.innerHTML=
-        (passage.paragraphs||[])
-        .map(p=>{
+    box.innerHTML =
+        (passage.paragraphs || [])
+        .map(paragraph => {
 
-            const id=
-                getPlainText(p.id||"");
+            const id =
+                escapeHTML(paragraph.id || "");
 
-            const text=
-                getPlainText(p.text??p.content??"");
+            const text =
+                highlightVocabulary(
+                    paragraph.text || ""
+                );
 
             return `
                 <p class="passage-paragraph">
-
                     ${
                         id
-                            ? `
-                                <span class="paragraph-label">
-                                    ${escapeHTML(id)}
-                                </span>
-                              `
-                            :""
+                            ? `<strong class="paragraph-label">${id}</strong>`
+                            : ""
                     }
-
-                    ${highlightVocabulary(text)}
-
+                    ${text}
                 </p>
             `;
+
         })
         .join("");
 
-    box
-        .querySelectorAll(".vocabulary-word")
-        .forEach(el=>{
+    box.querySelectorAll(
+        ".vocabulary-word"
+    ).forEach(word => {
 
-            el.onclick=e=>{
+        word.addEventListener("click", event => {
 
-                e.stopPropagation();
+            event.stopPropagation();
 
-                showVocabularyPopup(
-                    el.dataset.word
-                );
-            };
+            showVocabularyPopup(
+                word.dataset.word,
+                word
+            );
         });
+    });
 }
 
 /* =========================================================
    VOCABULARY
 ========================================================= */
 
-async function loadVocabulary(){
+async function loadVocabulary() {
 
-    try{
+    vocabulary = {};
 
-        const response=await fetch(
+    try {
+
+        const response = await fetch(
             `${CONFIG.VOCABULARY_FILE}?${Date.now()}`,
-            {cache:"no-store"}
+            { cache: "no-store" }
         );
 
-        if(!response.ok){
-            vocabulary={};
-            return;
+        if (!response.ok) return;
+
+        const data = await response.json();
+
+        if (Array.isArray(data)) {
+
+            data.forEach(item => {
+
+                const word =
+                    item.word ||
+                    item.term ||
+                    item.chinese ||
+                    item.text;
+
+                if (word) {
+                    vocabulary[
+                        normalizeAnswer(word)
+                    ] = item;
+                }
+            });
+
+        } else if (
+            data &&
+            typeof data === "object"
+        ) {
+
+            vocabulary = data;
         }
 
-        const data=await response.json();
+    } catch (error) {
 
-        vocabulary=
-            data.words||
-            data||
-            {};
-
-    }catch{
-
-        vocabulary={};
+        console.warn(
+            "Vocabulary file unavailable."
+        );
     }
 }
 
-function highlightVocabulary(text){
+function highlightVocabulary(text) {
 
-    let result=
-        escapeHTML(text);
+    let html = escapeHTML(text);
 
-    const words=
-        Object.keys(vocabulary||{})
-        .sort((a,b)=>b.length-a.length);
+    const words =
+        Object.keys(vocabulary)
+            .filter(Boolean)
+            .sort((a, b) => b.length - a.length);
 
-    words.forEach(word=>{
+    if (!words.length) return html;
 
-        const regex=
+    words.forEach(word => {
+
+        const safe =
+            word.replace(
+                /[.*+?^${}()|[\]\\]/g,
+                "\\$&"
+            );
+
+        const regex =
             new RegExp(
-                `(?<![A-Za-z])(${escapeRegExp(word)})(?![A-Za-z])`,
+                `(${safe})`,
                 "gi"
             );
 
-        result=
-            result.replace(
+        html =
+            html.replace(
                 regex,
-                match=>`
-                    <span
-                        class="vocabulary-word"
-                        data-word="${escapeAttr(match)}"
-                    >
-                        ${match}
-                    </span>
-                `
+                `<span class="vocabulary-word" data-word="$1">$1</span>`
             );
     });
 
-    return result;
+    return html;
 }
 
-function showVocabularyPopup(word){
+function showVocabularyPopup(word, target) {
 
-    const key=
-        Object.keys(vocabulary||{})
-        .find(
-            x=>
-                x.toLowerCase()===
-                String(word).toLowerCase()
-        );
+    const key =
+        normalizeAnswer(word);
 
-    if(!key)return;
+    let item =
+        vocabulary[key];
 
-    const item=vocabulary[key]||{};
+    if (!item) {
 
-    const popup=$("vocabularyPopup");
+        const found =
+            Object.keys(vocabulary)
+                .find(
+                    k =>
+                        normalizeAnswer(k) === key
+                );
 
-    if(!popup)return;
-
-    setText(
-        "vocabularyWord",
-        word
-    );
-
-    setText(
-        "vocabularyMeaning",
-        getPlainText(
-            item.meaning||
-            item.definition||
-            "Meaning unavailable."
-        )
-    );
-
-    setText(
-        "vocabularySimpleMeaning",
-        getPlainText(
-            item.simpleMeaning||
-            item.example||
-            ""
-        )
-    );
-
-    popup.style.display="block";
-}
-
-function closeVocabularyPopup(){
-
-    const popup=$("vocabularyPopup");
-
-    if(popup){
-        popup.style.display="none";
+        if (found) {
+            item = vocabulary[found];
+        }
     }
-}
 
-/* =========================================================
-   QUESTION TYPE
-========================================================= */
+    if (!item) return;
 
-function normalizeType(type){
+    let popup = $("vocabularyPopup");
 
-    return String(type||"")
-        .trim()
-        .toLowerCase()
-        .replace(/-/g,"_")
-        .replace(/\s+/g,"_");
-}
+    if (!popup) {
 
-/* =========================================================
-   RENDER QUESTIONS
-========================================================= */
+        popup = document.createElement("div");
 
-function renderQuestions(part){
+        popup.id = "vocabularyPopup";
 
-    const box=$("questionsContent");
+        document.body.appendChild(popup);
+    }
 
-    if(!box)return;
-
-    box.innerHTML="";
-
-    (part.questionGroups||[])
-    .forEach(group=>{
-
-        const wrapper=
-            document.createElement("div");
-
-        wrapper.className=
-            "question-group";
-
-        if(group.questionRange){
-
-            wrapper.innerHTML+=`
-                <h3 class="question-group-title">
-                    Questions
-                    ${escapeHTML(
-                        getPlainText(group.questionRange)
-                    )}
-                </h3>
-            `;
-        }
-
-        if(group.instructions){
-
-            wrapper.innerHTML+=`
-                <p class="question-instructions">
-                    ${escapeHTML(
-                        getPlainText(group.instructions)
-                    )}
-                </p>
-            `;
-        }
-
-        const content=
-            document.createElement("div");
-
-        wrapper.appendChild(content);
-
-        const type=
-            normalizeType(group.type);
-
-        switch(type){
-
-            case "true_false_not_given":
-                renderChoiceQuestions(
-                    content,
-                    group,
-                    ["TRUE","FALSE","NOT GIVEN"]
-                );
-                break;
-
-            case "yes_no_not_given":
-                renderChoiceQuestions(
-                    content,
-                    group,
-                    ["YES","NO","NOT GIVEN"]
-                );
-                break;
-
-            case "fill_blank":
-            case "answer_box":
-                renderFillBlank(
-                    content,
-                    group
-                );
-                break;
-
-            case "summary_completion":
-                renderSummary(
-                    content,
-                    group
-                );
-                break;
-
-            case "multiple_choice":
-                renderMultipleChoice(
-                    content,
-                    group,
-                    false
-                );
-                break;
-
-            case "multiple_choice_multiple":
-                renderMultipleChoice(
-                    content,
-                    group,
-                    true
-                );
-                break;
-
-            case "matching_headings":
-                renderMatching(
-                    content,
-                    group
-                );
-                break;
-
-            case "matching_information":
-                renderMatching(
-                    content,
-                    group
-                );
-                break;
-
-            case "matching_features":
-                renderMatching(
-                    content,
-                    group
-                );
-                break;
-
-            default:
-                renderGeneric(
-                    content,
-                    group
-                );
-        }
-
-        box.appendChild(wrapper);
-    });
-
-    restoreAnswers();
-}
-
-/* =========================================================
-   CREATE QUESTION
-========================================================= */
-
-function createQuestion(question){
-
-    const item=
-        document.createElement("div");
-
-    item.className=
-        "question-item";
-
-    item.dataset.questionNumber=
-        question.number;
-
-    const text=
-        question.question||
-        question.text||
-        question.prompt||
-        question.statement||
+    const meaning =
+        item.meaning ||
+        item.definition ||
+        item.english ||
+        item.translation ||
         "";
 
-    item.innerHTML=`
+    popup.innerHTML = `
+        <button class="vocab-close" type="button">×</button>
+        <strong>${escapeHTML(word)}</strong>
+        ${
+            item.pinyin
+                ? `<div>${escapeHTML(item.pinyin)}</div>`
+                : ""
+        }
+        ${
+            meaning
+                ? `<p>${escapeHTML(meaning)}</p>`
+                : ""
+        }
+    `;
+
+    popup.style.display = "block";
+
+    popup.querySelector(
+        ".vocab-close"
+    ).onclick = () => {
+        popup.style.display = "none";
+    };
+}
+
+/* =========================================================
+   QUESTION RENDERING
+========================================================= */
+
+function renderQuestions(part) {
+
+    const box =
+        $("questionsContent") ||
+        $("questionContent");
+
+    if (!box) return;
+
+    box.innerHTML = "";
+
+    (part.questionGroups || []).forEach(
+        group => {
+
+            const wrapper =
+                document.createElement("section");
+
+            wrapper.className =
+                "question-group";
+
+            const heading =
+                document.createElement("div");
+
+            heading.className =
+                "group-heading";
+
+            heading.innerHTML = `
+                <h3>
+                    ${escapeHTML(
+                        group.questionRange ||
+                        rangeForGroup(group)
+                    )}
+                </h3>
+
+                ${
+                    group.instructions
+                        ? `<p>${escapeHTML(group.instructions)}</p>`
+                        : ""
+                }
+            `;
+
+            wrapper.appendChild(heading);
+
+            const type =
+                normalizeType(group.type);
+
+            switch (type) {
+
+                case "true_false_not_given":
+                    renderTFNG(wrapper, group);
+                    break;
+
+                case "yes_no_not_given":
+                    renderYNNG(wrapper, group);
+                    break;
+
+                case "fill_blank":
+                    renderFillBlank(wrapper, group);
+                    break;
+
+                case "summary_completion":
+                    renderSummaryCompletion(wrapper, group);
+                    break;
+
+                case "multiple_choice":
+                    renderMultipleChoice(wrapper, group);
+                    break;
+
+                case "multiple_choice_multiple":
+                    renderMultipleChoiceMultiple(wrapper, group);
+                    break;
+
+                case "matching_headings":
+                    renderMatchingHeadings(wrapper, group);
+                    break;
+
+                case "matching_information":
+                    renderMatchingInformation(wrapper, group);
+                    break;
+
+                case "matching_features":
+                    renderMatchingFeatures(wrapper, group);
+                    break;
+
+                case "answer_box":
+                    renderAnswerBox(wrapper, group);
+                    break;
+
+                default:
+                    renderGenericQuestions(wrapper, group);
+                    break;
+            }
+
+            box.appendChild(wrapper);
+        }
+    );
+}
+
+function normalizeType(type) {
+
+    return String(type || "")
+        .trim()
+        .toLowerCase()
+        .replace(/-/g, "_")
+        .replace(/\s+/g, "_");
+}
+
+function rangeForGroup(group) {
+
+    const numbers = [
+        ...(group.questions || []),
+        ...(group.blanks || [])
+    ]
+    .map(q => Number(q.number))
+    .filter(Number.isFinite)
+    .sort((a, b) => a - b);
+
+    if (!numbers.length) return "";
+
+    return `Questions ${numbers[0]}-${numbers[numbers.length - 1]}`;
+}
+
+/* =========================================================
+   BASIC QUESTION CARD
+========================================================= */
+
+function createQuestionCard(question) {
+
+    const card =
+        document.createElement("div");
+
+    card.className =
+        "question-card";
+
+    card.dataset.questionNumber =
+        question.number;
+
+    const number =
+        question.number;
+
+    card.innerHTML = `
         <div class="question-number">
-            ${escapeHTML(
-                getPlainText(question.number)
-            )}
+            ${escapeHTML(number)}
         </div>
 
         <div class="question-body">
 
             <div class="question-text">
-                ${escapeHTML(
-                    getPlainText(text)
-                )}
+                ${formatQuestionText(question.text || "")}
             </div>
 
             <div class="question-control"></div>
@@ -1143,55 +1070,78 @@ function createQuestion(question){
         </div>
     `;
 
-    return item;
+    return card;
+}
+
+function formatQuestionText(text) {
+
+    let result =
+        escapeHTML(text);
+
+    result =
+        result.replace(
+            /_{2,}/g,
+            `<span class="inline-blank">______</span>`
+        );
+
+    return result;
 }
 
 /* =========================================================
-   TRUE/FALSE / YES/NO
+   TFNG
 ========================================================= */
 
-function renderChoiceQuestions(
-    box,
-    group,
-    choices
-){
+function renderTFNG(box, group) {
 
-    (group.questions||[])
-    .forEach(question=>{
+    (group.questions || []).forEach(question => {
 
-        const item=
-            createQuestion(question);
+        const card =
+            createQuestionCard(question);
 
-        const control=
-            item.querySelector(
-                ".question-control"
-            );
+        const control =
+            card.querySelector(".question-control");
 
-        control.innerHTML=
-            choices
-            .map(choice=>`
+        control.appendChild(
+            createSelect(
+                question.number,
+                [
+                    "TRUE",
+                    "FALSE",
+                    "NOT GIVEN"
+                ]
+            )
+        );
 
-                <label class="choice-option">
+        box.appendChild(card);
+    });
+}
 
-                    <input
-                        type="radio"
-                        name="q_${question.number}"
-                        value="${escapeAttr(choice)}"
-                        data-question-number="${escapeAttr(
-                            question.number
-                        )}"
-                    >
+/* =========================================================
+   YES / NO / NG
+========================================================= */
 
-                    <span>
-                        ${escapeHTML(choice)}
-                    </span>
+function renderYNNG(box, group) {
 
-                </label>
+    (group.questions || []).forEach(question => {
 
-            `)
-            .join("");
+        const card =
+            createQuestionCard(question);
 
-        box.appendChild(item);
+        const control =
+            card.querySelector(".question-control");
+
+        control.appendChild(
+            createSelect(
+                question.number,
+                [
+                    "YES",
+                    "NO",
+                    "NOT GIVEN"
+                ]
+            )
+        );
+
+        box.appendChild(card);
     });
 }
 
@@ -1199,184 +1149,35 @@ function renderChoiceQuestions(
    FILL BLANK
 ========================================================= */
 
-function renderFillBlank(box,group){
+function renderFillBlank(box, group) {
 
-    const questions=
-        group.questions?.length
-            ? group.questions
-            : group.blanks||[];
+    (group.questions || []).forEach(question => {
 
-    questions.forEach(question=>{
+        const card =
+            createQuestionCard(question);
 
-        const item=
-            createQuestion(question);
+        const control =
+            card.querySelector(".question-control");
 
-        const control=
-            item.querySelector(
-                ".question-control"
-            );
+        const input =
+            document.createElement("input");
 
-        control.innerHTML=`
-            <input
-                type="text"
-                class="answer-input"
-                data-question-number="${escapeAttr(
-                    question.number
-                )}"
-                autocomplete="off"
-                spellcheck="false"
-                placeholder="Type your answer"
-            >
-        `;
+        input.type = "text";
 
-        box.appendChild(item);
-    });
-}
+        input.className =
+            "answer-input";
 
-/* =========================================================
-   GENERIC
-========================================================= */
+        input.dataset.questionNumber =
+            question.number;
 
-function renderGeneric(box,group){
+        input.placeholder =
+            "Type your answer";
 
-    (group.questions||[])
-    .forEach(question=>{
+        input.autocomplete = "off";
 
-        const item=
-            createQuestion(question);
+        control.appendChild(input);
 
-        const control=
-            item.querySelector(
-                ".question-control"
-            );
-
-        const options=
-            question.options||
-            question.choices||
-            group.options||
-            group.choices||
-            [];
-
-        if(options.length){
-
-            control.innerHTML=
-                options
-                .map((option,index)=>{
-
-                    const value=
-                        getOptionValue(option);
-
-                    const label=
-                        getOptionLabel(option);
-
-                    return `
-                        <label class="choice-option">
-
-                            <input
-                                type="radio"
-                                name="q_${question.number}"
-                                value="${escapeAttr(value)}"
-                                data-question-number="${escapeAttr(
-                                    question.number
-                                )}"
-                            >
-
-                            <span>
-                                ${String.fromCharCode(
-                                    65+index
-                                )}.
-                                ${label}
-                            </span>
-
-                        </label>
-                    `;
-                })
-                .join("");
-
-        }else{
-
-            control.innerHTML=`
-                <input
-                    type="text"
-                    class="answer-input"
-                    data-question-number="${escapeAttr(
-                        question.number
-                    )}"
-                >
-            `;
-        }
-
-        box.appendChild(item);
-    });
-}
-
-/* =========================================================
-   MULTIPLE CHOICE
-========================================================= */
-
-function renderMultipleChoice(
-    box,
-    group,
-    multiple
-){
-
-    (group.questions||[])
-    .forEach(question=>{
-
-        const item=
-            createQuestion(question);
-
-        const control=
-            item.querySelector(
-                ".question-control"
-            );
-
-        const options=
-            question.options||
-            question.choices||
-            group.options||
-            group.choices||
-            [];
-
-        control.innerHTML=
-            options
-            .map((option,index)=>{
-
-                const value=
-                    getOptionValue(option);
-
-                const label=
-                    getOptionLabel(option);
-
-                return `
-                    <label class="choice-option">
-
-                        <input
-                            type="${multiple?"checkbox":"radio"}"
-                            name="q_${question.number}${
-                                multiple
-                                    ? `_${index}`
-                                    :""
-                            }"
-                            value="${escapeAttr(value)}"
-                            data-question-number="${escapeAttr(
-                                question.number
-                            )}"
-                        >
-
-                        <span>
-                            ${String.fromCharCode(
-                                65+index
-                            )}.
-                            ${label}
-                        </span>
-
-                    </label>
-                `;
-            })
-            .join("");
-
-        box.appendChild(item);
+        box.appendChild(card);
     });
 }
 
@@ -1384,1056 +1185,1382 @@ function renderMultipleChoice(
    SUMMARY COMPLETION
 ========================================================= */
 
-function renderSummary(box,group){
+function renderSummaryCompletion(box, group) {
 
-    const blanks=
+    const blanks =
         group.blanks?.length
             ? group.blanks
-            : group.questions||[];
+            : group.questions || [];
 
-    const options=
-        group.options||
-        group.choices||
-        group.words||
-        group.wordBank||
-        getAnswersAsOptions(blanks);
+    let options =
+        normalizeOptions(
+            group.options ||
+            group.words ||
+            group.wordBank ||
+            group.choices ||
+            []
+        );
 
-    const wrapper=
+    if (!options.length) {
+
+        options =
+            blanks
+                .map(
+                    blank => blank.answer
+                )
+                .filter(Boolean)
+                .map(
+                    value => ({
+                        value: String(value),
+                        text: String(value)
+                    })
+                );
+    }
+
+    const container =
         document.createElement("div");
 
-    wrapper.className=
+    container.className =
         "summary-completion";
 
-    if(group.summary){
+    container.innerHTML = `
+        <div class="drag-bank-title">
+            Given words:
+        </div>
 
-        const summary=
+        <div class="drag-option-bank"></div>
+
+        <div class="summary-text"></div>
+    `;
+
+    const bank =
+        container.querySelector(
+            ".drag-option-bank"
+        );
+
+    options.forEach(option => {
+
+        const item =
+            createDragOption(
+                option,
+                "summary-drag-word"
+            );
+
+        bank.appendChild(item);
+    });
+
+    const summary =
+        container.querySelector(
+            ".summary-text"
+        );
+
+    blanks.forEach(blank => {
+
+        const row =
             document.createElement("div");
 
-        summary.className=
-            "summary-text";
+        row.className =
+            "summary-blank-row";
 
-        let html=
-            getPlainText(group.summary);
+        row.innerHTML = `
+            <span class="summary-question-number">
+                ${escapeHTML(blank.number)}
+            </span>
 
-        blanks.forEach(blank=>{
+            <span class="summary-blank-text">
+                ${formatQuestionText(
+                    blank.text || ""
+                )}
+            </span>
 
-            const replacement=`
-                <span
-                    class="drop-answer"
-                    data-question-number="${escapeAttr(
-                        blank.number
-                    )}"
-                    tabindex="0"
+            <div
+                class="summary-drop-zone"
+                data-question-number="${escapeAttr(blank.number)}"
+            >
+                <span class="drop-placeholder">
+                    Drop / select answer
+                </span>
+            </div>
+        `;
+
+        summary.appendChild(row);
+
+        setupDropZone(
+            row.querySelector(".summary-drop-zone")
+        );
+    });
+
+    box.appendChild(container);
+}
+
+/* =========================================================
+   MULTIPLE CHOICE
+========================================================= */
+
+function renderMultipleChoice(box, group) {
+
+    (group.questions || []).forEach(question => {
+
+        const card =
+            createQuestionCard(question);
+
+        const control =
+            card.querySelector(".question-control");
+
+        const options =
+            getOptions(question, group);
+
+        const select =
+            createSelect(
+                question.number,
+                options,
+                true
+            );
+
+        control.appendChild(select);
+
+        box.appendChild(card);
+    });
+}
+
+/* =========================================================
+   MULTIPLE CHOICE MULTIPLE
+========================================================= */
+
+function renderMultipleChoiceMultiple(box, group) {
+
+    (group.questions || []).forEach(question => {
+
+        const card =
+            createQuestionCard(question);
+
+        const control =
+            card.querySelector(".question-control");
+
+        const options =
+            getOptions(question, group);
+
+        options.forEach(option => {
+
+            const normalized =
+                normalizeOption(option);
+
+            const label =
+                document.createElement("label");
+
+            label.className =
+                "multiple-option";
+
+            label.innerHTML = `
+                <input
+                    type="checkbox"
+                    data-question-number="${escapeAttr(question.number)}"
+                    value="${escapeAttr(normalized.value)}"
                 >
-                    ${getSavedDisplay(
-                        blank.number
-                    )}
+                <span>
+                    ${escapeHTML(normalized.text)}
                 </span>
             `;
 
-            html=
-                html.replace(
-                    new RegExp(
-                        `\\{\\{${blank.number}\\}\\}`,
-                        "g"
-                    ),
-                    replacement
-                );
-
-            html=
-                html.replace(
-                    new RegExp(
-                        `\\[${blank.number}\\]`,
-                        "g"
-                    ),
-                    replacement
-                );
+            control.appendChild(label);
         });
 
-        summary.innerHTML=
-            escapeHTML(html)
-            .replace(
-                /&lt;span/g,
-                "<span"
-            )
-            .replace(
-                /&gt;/g,
-                ">"
-            )
-            .replace(
-                /&lt;\/span&gt;/g,
-                "</span>"
-            );
+        box.appendChild(card);
+    });
+}
 
-        wrapper.appendChild(summary);
-    }
+/* =========================================================
+   MATCHING HEADINGS
+========================================================= */
 
-    const wordBank=
+function renderMatchingHeadings(box, group) {
+
+    const headings =
+        normalizeOptions(
+            group.headings ||
+            group.options ||
+            group.choices ||
+            []
+        );
+
+    (group.questions || []).forEach(question => {
+
+        const card =
+            createQuestionCard(question);
+
+        const control =
+            card.querySelector(".question-control");
+
+        control.appendChild(
+            createSelect(
+                question.number,
+                headings,
+                true
+            )
+        );
+
+        box.appendChild(card);
+    });
+}
+
+/* =========================================================
+   MATCHING INFORMATION
+========================================================= */
+
+function renderMatchingInformation(box, group) {
+
+    const options =
+        normalizeOptions(
+            group.options ||
+            group.paragraphs ||
+            group.choices ||
+            []
+        );
+
+    (group.questions || []).forEach(question => {
+
+        const card =
+            createQuestionCard(question);
+
+        const control =
+            card.querySelector(".question-control");
+
+        control.appendChild(
+            createSelect(
+                question.number,
+                options,
+                true
+            )
+        );
+
+        box.appendChild(card);
+    });
+}
+
+/* =========================================================
+   MATCHING FEATURES
+   DRAG + DROP + CLICK
+========================================================= */
+
+function renderMatchingFeatures(box, group) {
+
+    const options =
+        normalizeOptions(
+            group.options ||
+            group.features ||
+            group.choices ||
+            []
+        );
+
+    const container =
         document.createElement("div");
 
-    wordBank.className=
-        "word-bank";
+    container.className =
+        "matching-features-container";
 
-    wordBank.innerHTML=
-        options
-        .map(option=>{
-
-            const value=
-                getOptionValue(option);
-
-            const label=
-                getOptionLabel(option);
-
-            return `
-                <button
-                    type="button"
-                    class="drag-option"
-                    draggable="true"
-                    data-option="${escapeAttr(
-                        value
-                    )}"
-                >
-                    ${label}
-                </button>
-            `;
-        })
-        .join("");
-
-    wrapper.appendChild(wordBank);
-
-    const inputs=
+    const bank =
         document.createElement("div");
 
-    inputs.className=
-        "summary-inputs";
+    bank.className =
+        "drag-option-bank";
 
-    blanks.forEach(blank=>{
+    bank.innerHTML = `
+        <div class="drag-bank-title">
+            Choose an option:
+        </div>
+    `;
 
-        const item=
+    const bankItems =
+        document.createElement("div");
+
+    bankItems.className =
+        "drag-options";
+
+    options.forEach(option => {
+
+        bankItems.appendChild(
+            createDragOption(
+                option,
+                "drag-option"
+            )
+        );
+    });
+
+    bank.appendChild(bankItems);
+
+    container.appendChild(bank);
+
+    (group.questions || []).forEach(question => {
+
+        const row =
             document.createElement("div");
 
-        item.className=
-            "summary-blank";
+        row.className =
+            "drag-question";
 
-        item.innerHTML=`
-            <label>
+        row.innerHTML = `
+            <div class="drag-question-text">
+                <strong>${escapeHTML(question.number)}</strong>
+                ${formatQuestionText(question.text || "")}
+            </div>
 
-                ${escapeHTML(
-                    getPlainText(blank.number)
-                )}.
-
-                <input
-                    type="text"
-                    class="answer-input"
-                    data-question-number="${escapeAttr(
-                        blank.number
-                    )}"
-                    autocomplete="off"
-                >
-
-            </label>
+            <div
+                class="drag-drop-zone"
+                data-question-number="${escapeAttr(question.number)}"
+            >
+                <span class="drop-placeholder">
+                    Drop / select answer
+                </span>
+            </div>
         `;
 
-        inputs.appendChild(item);
+        container.appendChild(row);
+
+        setupDropZone(
+            row.querySelector(".drag-drop-zone")
+        );
     });
 
-    wrapper.appendChild(inputs);
-
-    box.appendChild(wrapper);
-
-    setupDragOptions(wrapper);
+    box.appendChild(container);
 }
 
-function getAnswersAsOptions(blanks){
+/* =========================================================
+   ANSWER BOX
+========================================================= */
 
-    const values=[];
+function renderAnswerBox(box, group) {
 
-    blanks.forEach(blank=>{
+    (group.questions || []).forEach(question => {
 
-        const answer=
-            blank.answer??
-            blank.correctAnswer??
-            blank.correct;
+        const card =
+            createQuestionCard(question);
 
-        if(Array.isArray(answer)){
+        const control =
+            card.querySelector(".question-control");
 
-            answer.forEach(x=>{
-                values.push(x);
-            });
+        const input =
+            document.createElement("input");
 
-        }else if(answer!==undefined){
+        input.type = "text";
 
-            values.push(answer);
+        input.className =
+            "answer-input";
+
+        input.dataset.questionNumber =
+            question.number;
+
+        input.placeholder =
+            "Your answer";
+
+        control.appendChild(input);
+
+        box.appendChild(card);
+    });
+}
+
+/* =========================================================
+   GENERIC
+========================================================= */
+
+function renderGenericQuestions(box, group) {
+
+    const questions =
+        group.questions || [];
+
+    questions.forEach(question => {
+
+        const card =
+            createQuestionCard(question);
+
+        const control =
+            card.querySelector(".question-control");
+
+        const options =
+            getOptions(question, group);
+
+        if (options.length) {
+
+            control.appendChild(
+                createSelect(
+                    question.number,
+                    options,
+                    true
+                )
+            );
+
+        } else {
+
+            const input =
+                document.createElement("input");
+
+            input.type = "text";
+
+            input.className =
+                "answer-input";
+
+            input.dataset.questionNumber =
+                question.number;
+
+            input.placeholder =
+                "Your answer";
+
+            control.appendChild(input);
         }
-    });
 
-    return [
-        ...new Set(
-            values.map(getOptionValue)
-        )
-    ];
+        box.appendChild(card);
+    });
 }
 
-function getSavedDisplay(number){
+/* =========================================================
+   SELECT
+========================================================= */
 
-    return escapeHTML(
-        formatAnswer(
-            studentAnswers[number]||
-            "Drop answer"
-        )
+function createSelect(
+    number,
+    options,
+    allowLetters = false
+) {
+
+    const select =
+        document.createElement("select");
+
+    select.dataset.questionNumber =
+        number;
+
+    select.className =
+        "question-select";
+
+    const placeholder =
+        document.createElement("option");
+
+    placeholder.value = "";
+
+    placeholder.textContent =
+        "Select your answer";
+
+    placeholder.disabled = false;
+
+    placeholder.selected = true;
+
+    select.appendChild(placeholder);
+
+    normalizeOptions(options).forEach(option => {
+
+        const opt =
+            document.createElement("option");
+
+        const normalized =
+            normalizeOption(option);
+
+        opt.value =
+            normalized.value;
+
+        opt.textContent =
+            normalized.text;
+
+        select.appendChild(opt);
+    });
+
+    return select;
+}
+
+/* =========================================================
+   OPTIONS
+========================================================= */
+
+function getOptions(question, group) {
+
+    return normalizeOptions(
+        question.options ||
+        question.choices ||
+        question.answerOptions ||
+        group.options ||
+        group.choices ||
+        group.answerOptions ||
+        []
+    );
+}
+
+function normalizeOptions(options) {
+
+    if (!Array.isArray(options)) {
+
+        if (
+            options &&
+            typeof options === "object"
+        ) {
+
+            return Object.entries(options)
+                .map(([key, value]) => ({
+                    value: key,
+                    text: String(value)
+                }));
+        }
+
+        return [];
+    }
+
+    return options
+        .map(normalizeOption)
+        .filter(option => option.text);
+}
+
+function normalizeOption(option) {
+
+    if (
+        option === null ||
+        option === undefined
+    ) {
+        return {
+            value: "",
+            text: ""
+        };
+    }
+
+    if (
+        typeof option === "string" ||
+        typeof option === "number"
+    ) {
+
+        return {
+            value: String(option),
+            text: String(option)
+        };
+    }
+
+    if (typeof option === "object") {
+
+        const value =
+            option.value ??
+            option.letter ??
+            option.id ??
+            option.key ??
+            option.text ??
+            "";
+
+        const text =
+            option.text ??
+            option.label ??
+            option.name ??
+            option.value ??
+            option.letter ??
+            option.id ??
+            "";
+
+        return {
+            value: String(value),
+            text: String(text)
+        };
+    }
+
+    return {
+        value: "",
+        text: ""
+    };
+}
+
+/* =========================================================
+   DRAG OPTIONS
+========================================================= */
+
+function createDragOption(
+    option,
+    className
+) {
+
+    const normalized =
+        normalizeOption(option);
+
+    const element =
+        document.createElement("div");
+
+    element.className =
+        className;
+
+    element.draggable = true;
+
+    element.dataset.value =
+        normalized.value;
+
+    element.dataset.text =
+        normalized.text;
+
+    element.innerHTML =
+        escapeHTML(normalized.text);
+
+    element.addEventListener(
+        "dragstart",
+        event => {
+
+            selectedDragOption =
+                element;
+
+            event.dataTransfer.effectAllowed =
+                "copy";
+
+            event.dataTransfer.setData(
+                "text/plain",
+                JSON.stringify({
+                    value:
+                        normalized.value,
+                    text:
+                        normalized.text
+                })
+            );
+
+            element.classList.add(
+                "dragging"
+            );
+        }
+    );
+
+    element.addEventListener(
+        "dragend",
+        () => {
+
+            element.classList.remove(
+                "dragging"
+            );
+
+            selectedDragOption = null;
+        }
+    );
+
+    return element;
+}
+
+/* =========================================================
+   DROP ZONES
+========================================================= */
+
+function setupDropZone(zone) {
+
+    zone.addEventListener(
+        "dragover",
+        event => {
+
+            event.preventDefault();
+
+            zone.classList.add(
+                "drag-over"
+            );
+        }
+    );
+
+    zone.addEventListener(
+        "dragleave",
+        () => {
+
+            zone.classList.remove(
+                "drag-over"
+            );
+        }
+    );
+
+    zone.addEventListener(
+        "drop",
+        event => {
+
+            event.preventDefault();
+
+            zone.classList.remove(
+                "drag-over"
+            );
+
+            let data = null;
+
+            try {
+
+                data =
+                    JSON.parse(
+                        event.dataTransfer.getData(
+                            "text/plain"
+                        )
+                    );
+
+            } catch (error) {}
+
+            if (!data && selectedDragOption) {
+
+                data = {
+                    value:
+                        selectedDragOption.dataset.value,
+                    text:
+                        selectedDragOption.dataset.text
+                };
+            }
+
+            if (data) {
+
+                placeDroppedAnswer(
+                    zone,
+                    data.value,
+                    data.text
+                );
+            }
+        }
+    );
+
+    zone.addEventListener(
+        "click",
+        () => {
+
+            if (selectedDragOption) {
+
+                placeDroppedAnswer(
+                    zone,
+                    selectedDragOption.dataset.value,
+                    selectedDragOption.dataset.text
+                );
+
+                selectedDragOption.classList.remove(
+                    "selected"
+                );
+
+                selectedDragOption = null;
+            }
+        }
     );
 }
 
 /* =========================================================
-   DRAG / CLICK
+   CLICK-TO-SELECT
 ========================================================= */
 
-function setupDragOptions(container){
+function selectDragOption(element) {
 
-    container
-        .querySelectorAll(".drag-option")
-        .forEach(option=>{
-
-            option.addEventListener(
-                "dragstart",
-                ()=>{
-                    selectedDragOption=
-                        option.dataset.option;
-                }
-            );
-
-            option.addEventListener(
-                "click",
-                ()=>{
-
-                    selectedDragOption=
-                        option.dataset.option;
-
-                    container
-                        .querySelectorAll(".drag-option")
-                        .forEach(x=>
-                            x.classList.remove(
-                                "selected"
-                            )
-                        );
-
-                    option.classList.add(
-                        "selected"
-                    );
-                }
-            );
+    document
+        .querySelectorAll(
+            ".drag-option.selected, .summary-drag-word.selected"
+        )
+        .forEach(item => {
+            item.classList.remove("selected");
         });
 
-    container
-        .querySelectorAll(".drop-answer")
-        .forEach(drop=>{
+    element.classList.add("selected");
 
-            drop.addEventListener(
-                "dragover",
-                e=>e.preventDefault()
-            );
+    selectedDragOption =
+        element;
 
-            drop.addEventListener(
-                "drop",
-                e=>{
-
-                    e.preventDefault();
-
-                    if(
-                        selectedDragOption
-                    ){
-
-                        setAnswer(
-                            drop.dataset.questionNumber,
-                            selectedDragOption
-                        );
-
-                        drop.textContent=
-                            selectedDragOption;
-
-                        drop.classList.add(
-                            "filled"
-                        );
-                    }
-                }
-            );
-
-            drop.addEventListener(
-                "click",
-                ()=>{
-
-                    if(
-                        selectedDragOption
-                    ){
-
-                        setAnswer(
-                            drop.dataset.questionNumber,
-                            selectedDragOption
-                        );
-
-                        drop.textContent=
-                            selectedDragOption;
-
-                        drop.classList.add(
-                            "filled"
-                        );
-                    }
-                }
-            );
-        });
+    showToast(
+        "Now click the answer box."
+    );
 }
 
 /* =========================================================
-   MATCHING
+   PLACE ANSWER
 ========================================================= */
 
-function renderMatching(box,group){
+function placeDroppedAnswer(
+    zone,
+    value,
+    text
+) {
 
-    const questions=
-        group.questions||[];
+    const number =
+        zone.dataset.questionNumber;
 
-    const options=
-        group.options||
-        group.choices||
-        group.headings||
-        group.features||
-        [];
+    if (!number) return;
 
-    const wrapper=
-        document.createElement("div");
+    studentAnswers[number] =
+        value;
 
-    wrapper.className=
-        "matching-container";
+    saveAnswers();
 
-    questions.forEach(question=>{
-
-        const item=
-            createQuestion(question);
-
-        const control=
-            item.querySelector(
-                ".question-control"
-            );
-
-        control.innerHTML=`
-            <select
-                class="answer-select"
-                data-question-number="${escapeAttr(
-                    question.number
-                )}"
+    zone.innerHTML = `
+        <span class="dropped-answer">
+            ${escapeHTML(text)}
+            <button
+                type="button"
+                class="remove-dropped-answer"
+                data-question-number="${escapeAttr(number)}"
+                aria-label="Remove answer"
             >
+                ×
+            </button>
+        </span>
+    `;
 
-                <option value="">
-                    Select answer
-                </option>
-
-                ${options
-                    .map(option=>{
-
-                        const value=
-                            getOptionValue(option);
-
-                        const label=
-                            getOptionLabel(option);
-
-                        return `
-                            <option
-                                value="${escapeAttr(
-                                    value
-                                )}"
-                            >
-                                ${label}
-                            </option>
-                        `;
-                    })
-                    .join("")}
-
-            </select>
-        `;
-
-        wrapper.appendChild(item);
-    });
-
-    box.appendChild(wrapper);
+    updateQuestionNavigator();
 }
 
 /* =========================================================
-   ANSWER STORAGE
+   REMOVE DROP
 ========================================================= */
 
-function isAnswered(value){
+function removeDroppedAnswer(button) {
 
-    if(Array.isArray(value)){
-        return value.length>0;
+    const number =
+        button.dataset.questionNumber;
+
+    delete studentAnswers[number];
+
+    saveAnswers();
+
+    const zone =
+        document.querySelector(
+            `[data-question-number="${CSS.escape(number)}"].drag-drop-zone,
+             [data-question-number="${CSS.escape(number)}"].summary-drop-zone`
+        );
+
+    if (zone) {
+
+        zone.innerHTML = `
+            <span class="drop-placeholder">
+                Drop / select answer
+            </span>
+        `;
     }
 
-    return String(value??"").trim()!=="";
+    updateQuestionNavigator();
 }
 
-function setAnswer(number,value){
+/* =========================================================
+   SAVE INPUT
+========================================================= */
 
-    if(
-        value===null||
-        value===undefined||
-        (
-            !Array.isArray(value)&&
-            String(value).trim()===""
-        )
-    ){
+function saveInputAnswer(input) {
 
-        delete studentAnswers[number];
+    const number =
+        input.dataset.questionNumber;
 
-    }else{
+    if (!number) return;
 
-        studentAnswers[number]=value;
+    if (
+        input.type === "checkbox"
+    ) {
+
+        const boxes =
+            document.querySelectorAll(
+                `input[type="checkbox"][data-question-number="${CSS.escape(number)}"]`
+            );
+
+        const values =
+            [...boxes]
+                .filter(box => box.checked)
+                .map(box => box.value);
+
+        studentAnswers[number] =
+            values;
+
+    } else {
+
+        studentAnswers[number] =
+            input.value;
     }
 
     saveAnswers();
 
-    updateNavigator();
+    updateQuestionNavigator();
 }
 
-function saveAnswerFromElement(element){
+/* =========================================================
+   RESTORE ANSWERS
+========================================================= */
 
-    const number=
-        element.dataset.questionNumber;
+function restoreAnswersToDOM() {
 
-    if(number===undefined)return;
+    Object.entries(studentAnswers)
+        .forEach(([number, answer]) => {
 
-    let value="";
+            const value =
+                answer;
 
-    if(element.type==="radio"){
+            const input =
+                document.querySelector(
+                    `[data-question-number="${CSS.escape(number)}"]`
+                );
 
-        const group=
-            document.querySelectorAll(
-                `[data-question-number="${CSS.escape(
-                    number
-                )}"]`
-            );
+            if (!input) return;
 
-        const checked=
-            [...group]
-            .find(x=>x.checked);
+            if (input.tagName === "SELECT") {
 
-        value=
-            checked?
-            checked.value:
-            "";
+                input.value =
+                    Array.isArray(value)
+                        ? value[0] || ""
+                        : String(value);
 
-    }else if(element.type==="checkbox"){
+            } else if (
+                input.type === "checkbox"
+            ) {
 
-        const group=
-            document.querySelectorAll(
-                `[data-question-number="${CSS.escape(
-                    number
-                )}"]`
-            );
+                const values =
+                    Array.isArray(value)
+                        ? value
+                        : [value];
 
-        value=
-            [...group]
-            .filter(x=>x.checked)
-            .map(x=>x.value);
+                document
+                    .querySelectorAll(
+                        `input[type="checkbox"][data-question-number="${CSS.escape(number)}"]`
+                    )
+                    .forEach(box => {
 
-    }else{
+                        box.checked =
+                            values
+                                .map(String)
+                                .includes(
+                                    String(box.value)
+                                );
+                    });
 
-        value=element.value;
-    }
+            } else if (
+                input.type !== "radio"
+            ) {
 
-    setAnswer(
-        number,
-        value
-    );
-}
-
-function saveAllVisibleAnswers(){
-
-    document
-        .querySelectorAll(
-            "[data-question-number]"
-        )
-        .forEach(el=>{
-
-            if(
-                el.matches(
-                    "input,select,textarea"
-                )
-            ){
-                saveAnswerFromElement(el);
+                input.value =
+                    Array.isArray(value)
+                        ? value[0] || ""
+                        : value;
             }
         });
+
+    restoreDropZones();
+
+    updateQuestionNavigator();
 }
 
-function restoreAnswers(){
+function restoreDropZones() {
 
     document
         .querySelectorAll(
-            "[data-question-number]"
+            ".drag-drop-zone, .summary-drop-zone"
         )
-        .forEach(el=>{
+        .forEach(zone => {
 
-            const number=
-                el.dataset.questionNumber;
+            const number =
+                zone.dataset.questionNumber;
 
-            const value=
+            const answer =
                 studentAnswers[number];
 
-            if(
-                value===undefined||
-                value===null
-            ){
-                return;
-            }
+            if (
+                answer === undefined ||
+                answer === null ||
+                answer === ""
+            ) return;
 
-            if(el.type==="radio"){
+            const text =
+                String(answer);
 
-                el.checked=
-                    normalize(el.value)===
-                    normalize(value);
-
-            }else if(
-                el.type==="checkbox"
-            ){
-
-                const values=
-                    Array.isArray(value)
-                        ?value
-                        :[];
-
-                el.checked=
-                    values.some(
-                        x=>
-                            normalize(x)===
-                            normalize(el.value)
-                    );
-
-            }else{
-
-                el.value=
-                    Array.isArray(value)
-                        ?value.join(", ")
-                        :value;
-            }
+            zone.innerHTML = `
+                <span class="dropped-answer">
+                    ${escapeHTML(text)}
+                    <button
+                        type="button"
+                        class="remove-dropped-answer"
+                        data-question-number="${escapeAttr(number)}"
+                    >
+                        ×
+                    </button>
+                </span>
+            `;
         });
 }
 
-function saveAnswers(){
+/* =========================================================
+   LOCAL STORAGE
+========================================================= */
 
-    if(!currentTestNumber)return;
+function storageKey() {
 
-    localStorage.setItem(
-        `ieltsReadingAnswers_${currentTestNumber}`,
-        JSON.stringify(studentAnswers)
+    return (
+        CONFIG.STORAGE_PREFIX +
+        "test_" +
+        currentTestNumber
     );
 }
 
-function loadSavedAnswers(){
+function saveAnswers() {
 
-    if(!currentTestNumber)return;
+    if (!currentTestNumber) return;
 
-    try{
+    try {
 
-        const saved=
-            localStorage.getItem(
-                `ieltsReadingAnswers_${currentTestNumber}`
-            );
+        localStorage.setItem(
+            storageKey(),
+            JSON.stringify(studentAnswers)
+        );
 
-        studentAnswers=
-            saved?
-            JSON.parse(saved):
-            {};
-
-    }catch{
-
-        studentAnswers={};
+    } catch (error) {
+        console.warn(
+            "Could not save answers."
+        );
     }
 }
 
-function clearCurrentTestAnswers(){
+function loadSavedAnswers() {
 
-    if(currentTestNumber){
+    try {
 
-        localStorage.removeItem(
-            `ieltsReadingAnswers_${currentTestNumber}`
-        );
+        const data =
+            localStorage.getItem(
+                storageKey()
+            );
+
+        if (!data) return {};
+
+        const parsed =
+            JSON.parse(data);
+
+        return parsed &&
+            typeof parsed === "object"
+            ? parsed
+            : {};
+
+    } catch (error) {
+
+        return {};
     }
+}
 
-    studentAnswers={};
+function clearSavedAnswers() {
+
+    try {
+        localStorage.removeItem(
+            storageKey()
+        );
+    } catch (error) {}
 }
 
 /* =========================================================
    QUESTION NAVIGATOR
 ========================================================= */
 
-function renderQuestionNavigator(){
+function renderQuestionNavigator() {
 
-    const box=
-        $("questionNavigator")||
-        $("questionNav")||
-        $("questionNumbers");
+    const containers = [
+        $("questionNavigator"),
+        $("questionNav"),
+        $("questionNumberNav"),
+        $("questionNumbers")
+    ].filter(Boolean);
 
-    if(!box||!currentTest)return;
+    if (!containers.length) return;
 
-    const part=
-        currentTest.parts[currentPartIndex];
+    containers.forEach(container => {
 
-    const numbers=
-        getPartQuestionNumbers(part);
+        container.innerHTML = "";
 
-    box.innerHTML=
-        numbers
-        .map(number=>`
+        const numbers =
+            getPartQuestionNumbers(
+                currentTest.parts[
+                    currentPartIndex
+                ]
+            );
 
-            <button
-                type="button"
-                class="question-nav-number ${
-                    isAnswered(
-                        studentAnswers[number]
-                    )
-                        ?"answered"
-                        :""
-                }"
-                data-nav-question="${number}"
-            >
-                ${number}
-            </button>
+        numbers.forEach(number => {
 
-        `)
-        .join("");
+            const button =
+                document.createElement("button");
 
-    box
-        .querySelectorAll(
-            "[data-nav-question]"
-        )
-        .forEach(button=>{
+            button.type = "button";
 
-            button.onclick=()=>{
+            button.className =
+                "question-nav-button";
 
-                const el=
-                    document.querySelector(
-                        `[data-question-number="${CSS.escape(
-                            button.dataset.navQuestion
-                        )}"]`
-                    );
+            button.dataset.questionNav =
+                number;
 
-                if(el){
+            button.textContent =
+                number;
 
-                    el.closest(
-                        ".question-item,.summary-blank,.summary-completion"
-                    )?.scrollIntoView({
-                        behavior:"smooth",
-                        block:"center"
-                    });
-                }
-            };
+            container.appendChild(button);
         });
+    });
+
+    updateQuestionNavigator();
 }
 
-function updateNavigator(){
+function updateQuestionNavigator() {
 
-    const box=
-        $("questionNavigator")||
-        $("questionNav")||
-        $("questionNumbers");
-
-    if(!box)return;
-
-    box
+    document
         .querySelectorAll(
-            "[data-nav-question]"
+            "[data-question-nav]"
         )
-        .forEach(button=>{
+        .forEach(button => {
+
+            const number =
+                button.dataset.questionNav;
+
+            const answer =
+                studentAnswers[number];
+
+            const answered =
+                isAnswered(answer);
 
             button.classList.toggle(
                 "answered",
-                isAnswered(
-                    studentAnswers[
-                        button.dataset.navQuestion
-                    ]
-                )
+                answered
+            );
+
+            button.classList.toggle(
+                "current",
+                questionIsVisible(number)
             );
         });
 }
 
+function questionIsVisible(number) {
+
+    const element =
+        document.querySelector(
+            `[data-question-number="${CSS.escape(String(number))}"]`
+        );
+
+    if (!element) return false;
+
+    const card =
+        element.closest(
+            ".question-card, .drag-question, .summary-blank-row"
+        );
+
+    return !!card;
+}
+
+function jumpToQuestion(number) {
+
+    const selector =
+        `[data-question-number="${CSS.escape(String(number))}"]`;
+
+    const element =
+        document.querySelector(selector);
+
+    if (!element) return;
+
+    const card =
+        element.closest(
+            ".question-card, .drag-question, .summary-blank-row"
+        ) || element;
+
+    card.scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+
+    card.classList.add(
+        "question-highlight"
+    );
+
+    setTimeout(() => {
+        card.classList.remove(
+            "question-highlight"
+        );
+    }, 1000);
+}
+
 /* =========================================================
-   PART NAVIGATION
+   NAVIGATION
 ========================================================= */
 
-function updatePartButtons(){
+function previousPart() {
 
-    const previous=
+    if (currentPartIndex <= 0) return;
+
+    currentPartIndex--;
+
+    renderCurrentPart();
+}
+
+function nextPart() {
+
+    if (
+        currentPartIndex >=
+        currentTest.parts.length - 1
+    ) {
+        return;
+    }
+
+    currentPartIndex++;
+
+    renderCurrentPart();
+}
+
+function updatePartButtons() {
+
+    const previous =
         $("previousPartButton");
 
-    const next=
+    const next =
         $("nextPartButton");
 
-    if(previous){
-
-        previous.disabled=
-            currentPartIndex===0;
+    if (previous) {
+        previous.disabled =
+            currentPartIndex === 0;
     }
 
-    if(next){
+    if (next) {
 
-        next.textContent=
-            currentPartIndex===
-            currentTest.parts.length-1
-                ?"Finish Test"
-                :"Next Part";
+        next.disabled =
+            currentPartIndex ===
+            currentTest.parts.length - 1;
     }
 }
 
-function previousPart(){
+/* =========================================================
+   ANSWER STATUS
+========================================================= */
 
-    saveAllVisibleAnswers();
+function isAnswered(value) {
 
-    if(currentPartIndex>0){
-
-        currentPartIndex--;
-
-        renderCurrentPart();
+    if (value === undefined || value === null) {
+        return false;
     }
+
+    if (Array.isArray(value)) {
+        return value.some(
+            item =>
+                String(item).trim() !== ""
+        );
+    }
+
+    return String(value).trim() !== "";
 }
 
-function nextPart(){
+function countAnsweredAnswers(answerSet) {
 
-    saveAllVisibleAnswers();
-
-    if(
-        currentPartIndex<
-        currentTest.parts.length-1
-    ){
-
-        currentPartIndex++;
-
-        renderCurrentPart();
-
-    }else{
-
-        confirmSubmitTest();
-    }
+    return getAllQuestionNumbers()
+        .filter(
+            number =>
+                isAnswered(
+                    answerSet[number]
+                )
+        )
+        .length;
 }
 
 /* =========================================================
    SUBMIT
 ========================================================= */
 
-function confirmExitTest(){
+function confirmSubmitTest() {
 
-    if(
-        !testStarted||
-        testSubmitted
-    ){
+    if (testSubmitted) return;
 
-        showDashboard();
+    const unanswered =
+        getAllQuestionNumbers()
+            .filter(
+                number =>
+                    !isAnswered(
+                        studentAnswers[number]
+                    )
+            ).length;
 
-        return;
-    }
+    const message =
+        unanswered > 0
+            ? `You have ${unanswered} unanswered question(s). Submit anyway?`
+            : "Submit your Reading test?";
 
-    const ok=
-        confirm(
-            "Are you sure you want to leave this test?\n\nYour answers are saved locally."
-        );
-
-    if(ok){
-
-        stopTimer();
-
-        showDashboard();
+    if (
+        window.confirm(message)
+    ) {
+        submitTest();
     }
 }
 
-function confirmSubmitTest(){
+function closeConfirmModal() {
 
-    if(testSubmitted)return;
-
-    saveAllVisibleAnswers();
-
-    const total=
-        countTotalQuestions();
-
-    const answered=
-        countAnsweredAnswers(
-            studentAnswers
-        );
-
-    const unanswered=
-        total-answered;
-
-    const message=
-        unanswered>0
-            ?`You still have ${unanswered} unanswered question(s).\n\nAre you sure you want to submit?`
-            :"Are you sure you want to submit your test?";
-
-    const modal=
+    const modal =
         $("confirmModal");
 
-    if(modal){
-
-        const text=
-            modal.querySelector(
-                ".confirm-message"
-            )||
-            modal.querySelector(
-                "[data-confirm-message]"
-            );
-
-        if(text){
-            text.textContent=
-                message;
-        }
-
-        modal.style.display=
-            "flex";
-
-    }else{
-
-        if(confirm(message)){
-            submitTest();
-        }
+    if (modal) {
+        modal.style.display = "none";
     }
 }
 
-function closeConfirmModal(){
+function autoSubmitTest() {
 
-    const modal=
-        $("confirmModal");
-
-    if(modal){
-        modal.style.display=
-            "none";
-    }
-}
-
-function autoSubmitTest(){
-
-    saveAllVisibleAnswers();
+    if (testSubmitted) return;
 
     submitTest();
+}
+
+function submitTest() {
+
+    if (testSubmitted) return;
+
+    testSubmitted = true;
+
+    stopTimer();
+
+    testElapsedSeconds =
+        Math.max(
+            0,
+            Math.floor(
+                (Date.now() - testStartTime) / 1000
+            )
+        );
+
+    submittedAnswers =
+        JSON.parse(
+            JSON.stringify(studentAnswers)
+        );
+
+    scoreData =
+        calculateScore(
+            submittedAnswers
+        );
+
+    clearSavedAnswers();
+
+    renderResult();
 }
 
 /* =========================================================
    SCORE
 ========================================================= */
 
-async function submitTest(){
+function calculateScore(answerSet) {
 
-    if(testSubmitted)return;
+    let total = 0;
 
-    saveAllVisibleAnswers();
+    const partScores = [];
+    const partTotals = [];
 
-    closeConfirmModal();
+    (currentTest.parts || []).forEach(part => {
 
-    stopTimer();
+        let partScore = 0;
+        let partTotal = 0;
 
-    testElapsedSeconds=
-        calculateTimeUsed();
+        (part.questionGroups || [])
+            .forEach(group => {
 
-    testSubmitted=true;
-
-    submittedAnswers=
-        JSON.parse(
-            JSON.stringify(
-                studentAnswers
-            )
-        );
-
-    scoreData=
-        calculateScore(
-            submittedAnswers
-        );
-
-    clearCurrentTestAnswers();
-
-    renderResult();
-}
-
-function getAllQuestions(){
-
-    const result=[];
-
-    if(!currentTest)return result;
-
-    currentTest.parts.forEach(
-        (part,partIndex)=>{
-
-            (part.questionGroups||[])
-            .forEach(group=>{
-
-                [
-                    ...(group.questions||[]),
-                    ...(group.blanks||[])
-                ].forEach(question=>{
-
-                    result.push({
-                        ...question,
-                        partIndex,
-                        group
-                    });
-                });
-            });
-        }
-    );
-
-    return result;
-}
-
-function countTotalQuestions(){
-
-    return getAllQuestions().length;
-}
-
-function getCorrectAnswer(question){
-
-    return (
-        question.answer??
-        question.correctAnswer??
-        question.correct??
-        question.answers??
-        question.expectedAnswer??
-        question.solution
-    );
-}
-
-function answersMatch(user,correct){
-
-    if(!isAnswered(user)){
-        return false;
-    }
-
-    if(
-        correct===undefined||
-        correct===null
-    ){
-        return false;
-    }
-
-    if(Array.isArray(correct)){
-
-        let userValues=
-            Array.isArray(user)
-                ?user
-                :String(user)
-                    .split(",")
-                    .map(x=>x.trim())
-                    .filter(Boolean);
-
-        const correctValues=
-            correct.map(
-                x=>getOptionValue(x)
-            );
-
-        if(
-            userValues.length!==
-            correctValues.length
-        ){
-            return false;
-        }
-
-        return userValues.every(
-            x=>
-                correctValues.some(
-                    y=>
-                        normalize(
-                            getOptionValue(x)
-                        )===
-                        normalize(
-                            getOptionValue(y)
-                        )
-                )
-        );
-    }
-
-    if(
-        typeof correct==="object"
-    ){
-
-        return normalize(
-            getOptionValue(user)
-        )===
-        normalize(
-            getOptionValue(correct)
-        );
-    }
-
-    return normalize(user)===
-        normalize(correct);
-}
-
-function calculateScore(
-    answerSet=studentAnswers
-){
-
-    let total=0;
-    let correct=0;
-
-    const partScores=[];
-    const partTotals=[];
-
-    currentTest.parts.forEach(
-        (part,index)=>{
-
-            let partScore=0;
-            let partTotal=0;
-
-            (part.questionGroups||[])
-            .forEach(group=>{
-
-                const questions=[
-                    ...(group.questions||[]),
-                    ...(group.blanks||[])
+                const questions = [
+                    ...(group.questions || []),
+                    ...(group.blanks || [])
                 ];
 
-                questions.forEach(question=>{
+                questions.forEach(question => {
 
                     partTotal++;
-                    total++;
 
-                    const user=
+                    const given =
                         answerSet[
                             question.number
                         ];
 
-                    const answer=
-                        getCorrectAnswer(
-                            question
-                        );
-
-                    if(
+                    if (
                         answersMatch(
-                            user,
-                            answer
+                            given,
+                            question.answer
                         )
-                    ){
-
+                    ) {
                         partScore++;
-                        correct++;
                     }
                 });
             });
 
-            partScores[index]=
-                partScore;
+        partScores.push(partScore);
+        partTotals.push(partTotal);
 
-            partTotals[index]=
-                partTotal;
-        }
-    );
+        total += partScore;
+    });
 
     return {
-
-        totalScore:correct,
-
-        totalQuestions:total,
-
+        totalScore: total,
+        totalQuestions: countTotalQuestions(),
         partScores,
-
         partTotals,
-
-        band:
-            calculateIELTSBand(
-                correct
-            ),
-
+        band: calculateIELTSBand(total),
         timeUsed:
             formatTime(
                 testElapsedSeconds
@@ -2442,98 +2569,225 @@ function calculateScore(
 }
 
 /* =========================================================
+   ANSWER MATCHING
+========================================================= */
+
+function answersMatch(given, correct) {
+
+    if (
+        given === undefined ||
+        given === null ||
+        correct === undefined ||
+        correct === null
+    ) {
+        return false;
+    }
+
+    const givenArray =
+        Array.isArray(given)
+            ? given
+            : [given];
+
+    const correctArray =
+        Array.isArray(correct)
+            ? correct
+            : [correct];
+
+    const normalizedGiven =
+        givenArray
+            .map(normalizeAnswer)
+            .filter(Boolean);
+
+    const normalizedCorrect =
+        correctArray
+            .map(normalizeAnswer)
+            .filter(Boolean);
+
+    if (
+        normalizedGiven.length !==
+        normalizedCorrect.length
+    ) {
+        return false;
+    }
+
+    return normalizedGiven
+        .every(
+            value =>
+                normalizedCorrect.includes(value)
+        );
+}
+
+/* =========================================================
    IELTS READING BAND
 ========================================================= */
 
-function calculateIELTSBand(score){
+function calculateIELTSBand(score) {
 
-    if(score>=39)return 9.0;
-    if(score>=37)return 8.5;
-    if(score>=35)return 8.0;
-    if(score>=33)return 7.5;
-    if(score>=30)return 7.0;
-    if(score>=27)return 6.5;
-    if(score>=23)return 6.0;
-    if(score>=19)return 5.5;
-    if(score>=15)return 5.0;
-    if(score>=13)return 4.5;
-    if(score>=10)return 4.0;
-    if(score>=8)return 3.5;
-    if(score>=6)return 3.0;
-    if(score>=4)return 2.5;
-    if(score>=2)return 2.0;
-    if(score>=1)return 1.0;
+    if (score >= 39) return 9.0;
+    if (score >= 37) return 8.5;
+    if (score >= 35) return 8.0;
+    if (score >= 33) return 7.5;
+    if (score >= 30) return 7.0;
+    if (score >= 27) return 6.5;
+    if (score >= 23) return 6.0;
+    if (score >= 19) return 5.5;
+    if (score >= 15) return 5.0;
+    if (score >= 13) return 4.5;
+    if (score >= 10) return 4.0;
+    if (score >= 8) return 3.5;
+    if (score >= 6) return 3.0;
+    if (score >= 4) return 2.5;
+    if (score >= 2) return 2.0;
+    if (score === 1) return 1.0;
 
     return 0;
 }
 
-function countAnsweredAnswers(answers){
-
-    return getAllQuestions()
-        .filter(
-            q=>
-                isAnswered(
-                    answers[
-                        q.number
-                    ]
-                )
-        )
-        .length;
-}
-
 /* =========================================================
-   RESULT PAGE
+   RESULT
 ========================================================= */
 
-function renderResult(){
+function renderResult() {
 
     showScreen("resultScreen");
 
-    const score=
-        scoreData.totalScore;
-
-    const total=
+    const total =
         scoreData.totalQuestions;
 
-    const answered=
+    const score =
+        scoreData.totalScore;
+
+    const answered =
         countAnsweredAnswers(
             submittedAnswers
         );
 
-    const incorrect=
+    const incorrect =
         Math.max(
             0,
-            answered-score
+            answered - score
         );
 
-    const unanswered=
+    const unanswered =
         Math.max(
             0,
-            total-answered
+            total - answered
         );
 
-    const accuracy=
+    const accuracy =
         answered
-            ?Math.round(
-                (score/answered)*100
+            ? Math.round(
+                score /
+                answered *
+                100
             )
-            :0;
+            : 0;
 
-    const title=
-        currentTest.title||
-        `IELTS Reading Test ${currentTestNumber}`;
+    const percentage =
+        total
+            ? Math.round(
+                score /
+                total *
+                100
+            )
+            : 0;
 
-    const screen=
+    setText(
+        "resultTestTitle",
+        currentTest.title ||
+        `IELTS Reading Test ${currentTestNumber}`
+    );
+
+    setText(
+        "resultScore",
+        score
+    );
+
+    setText(
+        "resultTotal",
+        `/ ${total}`
+    );
+
+    setText(
+        "resultBand",
+        Number(
+            scoreData.band
+        ).toFixed(1)
+    );
+
+    setText(
+        "resultTime",
+        scoreData.timeUsed
+    );
+
+    setText(
+        "resultAnswered",
+        answered
+    );
+
+    setText(
+        "resultIncorrect",
+        incorrect
+    );
+
+    setText(
+        "resultUnanswered",
+        unanswered
+    );
+
+    setText(
+        "resultAccuracy",
+        `${accuracy}%`
+    );
+
+    buildResultFallback(
+        score,
+        total,
+        answered,
+        incorrect,
+        unanswered,
+        accuracy,
+        percentage
+    );
+}
+
+/* =========================================================
+   RESULT FALLBACK / REPORT
+========================================================= */
+
+function buildResultFallback(
+    score,
+    total,
+    answered,
+    incorrect,
+    unanswered,
+    accuracy,
+    percentage
+) {
+
+    const screen =
         $("resultScreen");
 
-    if(!screen)return;
+    if (!screen) return;
 
-    screen.innerHTML=`
+    let report =
+        $("readingResultReport");
 
-        <div class="reading-result-report">
+    if (!report) {
+
+        report =
+            document.createElement("div");
+
+        report.id =
+            "readingResultReport";
+
+        screen.appendChild(report);
+    }
+
+    report.innerHTML = `
+        <div class="results-page">
 
             <div class="results-heading">
-
                 <div class="results-kicker">
                     TEST COMPLETE
                 </div>
@@ -2543,65 +2797,50 @@ function renderResult(){
                 </h1>
 
                 <p>
-                    ${escapeHTML(
-                        getPlainText(title)
-                    )}
+                    ${
+                        escapeHTML(
+                            currentTest.title ||
+                            `IELTS Reading Test ${currentTestNumber}`
+                        )
+                    }
                 </p>
 
                 <button
-                    id="printResultButton"
-                    class="print-score-button"
                     type="button"
+                    id="generatedPrintButton"
+                    class="print-result-button"
                 >
                     Print / Save PDF
                 </button>
-
             </div>
 
             <div class="result-hero">
 
                 <div class="score-ring">
-
-                    <div class="score-ring-inner">
-
-                        <strong>
-                            ${score}
-                        </strong>
-
-                        <span>
-                            / ${total}
-                        </span>
-
-                    </div>
-
+                    <strong>
+                        ${score}/${total}
+                    </strong>
+                    <span>
+                        ${percentage}%
+                    </span>
                 </div>
 
                 <div class="hero-copy">
 
                     <div class="status-pill">
-                        Completed
+                        ${score >= total * .7
+                            ? "Strong Result"
+                            : "Keep Practising"}
                     </div>
 
                     <h2>
                         Estimated IELTS Band
-                        ${Number(
-                            scoreData.band
-                        ).toFixed(1)}
+                        ${Number(scoreData.band).toFixed(1)}
                     </h2>
 
                     <p>
-                        You answered
-                        ${answered}
-                        of
-                        ${total}
-                        questions.
-                    </p>
-
-                    <p>
-                        Time used:
-                        <strong>
-                            ${scoreData.timeUsed}
-                        </strong>
+                        You answered ${answered}
+                        of ${total} questions.
                     </p>
 
                 </div>
@@ -2610,25 +2849,25 @@ function renderResult(){
 
             <div class="result-summary">
 
-                <div class="summary-stat">
-                    <strong>${score}</strong>
-                    <span>Correct</span>
-                </div>
+                ${resultStat(
+                    "Correct",
+                    score
+                )}
 
-                <div class="summary-stat">
-                    <strong>${incorrect}</strong>
-                    <span>Incorrect</span>
-                </div>
+                ${resultStat(
+                    "Incorrect",
+                    incorrect
+                )}
 
-                <div class="summary-stat">
-                    <strong>${unanswered}</strong>
-                    <span>Unanswered</span>
-                </div>
+                ${resultStat(
+                    "Unanswered",
+                    unanswered
+                )}
 
-                <div class="summary-stat">
-                    <strong>${accuracy}%</strong>
-                    <span>Accuracy</span>
-                </div>
+                ${resultStat(
+                    "Accuracy",
+                    `${accuracy}%`
+                )}
 
             </div>
 
@@ -2638,9 +2877,29 @@ function renderResult(){
                     Part-by-Part Score
                 </h2>
 
-                <div class="part-score-grid">
+                <div class="part-score-list">
 
-                    ${renderPartScoreHTML()}
+                    ${
+                        scoreData.partScores
+                            .map(
+                                (partScore, index) => `
+                                    <div class="part-score-row">
+
+                                        <span>
+                                            Part ${index + 1}
+                                        </span>
+
+                                        <strong>
+                                            ${partScore}
+                                            /
+                                            ${scoreData.partTotals[index]}
+                                        </strong>
+
+                                    </div>
+                                `
+                            )
+                            .join("")
+                    }
 
                 </div>
 
@@ -2648,63 +2907,39 @@ function renderResult(){
 
             <section class="result-section">
 
-                <div class="review-header">
-
-                    <div>
-
-                        <h2>
-                            Question Review
-                        </h2>
-
-                        <p>
-                            Review your answers and compare them with the correct answers.
-                        </p>
-
-                    </div>
-
-                    <div class="legend">
-
-                        <span>
-                            <i class="legend-dot correct"></i>
-                            Correct
-                        </span>
-
-                        <span>
-                            <i class="legend-dot incorrect"></i>
-                            Incorrect
-                        </span>
-
-                        <span>
-                            <i class="legend-dot unanswered"></i>
-                            Unanswered
-                        </span>
-
-                    </div>
-
-                </div>
+                <h2>
+                    Question Review
+                </h2>
 
                 <div class="review-grid">
 
-                    ${renderReviewHTML()}
+                    ${
+                        getAllReviewQuestions()
+                            .map(
+                                item =>
+                                    renderReviewItem(
+                                        item
+                                    )
+                            )
+                            .join("")
+                    }
 
                 </div>
 
             </section>
 
-            <div class="results-actions">
+            <div class="result-actions">
 
                 <button
-                    class="secondary-btn"
                     type="button"
-                    onclick="startAgainFromResult()"
+                    id="generatedRestartButton"
                 >
                     Start Again
                 </button>
 
                 <button
-                    class="primary-btn"
                     type="button"
-                    onclick="printScorePDF()"
+                    id="generatedPrintButton2"
                 >
                     Print / Save PDF
                 </button>
@@ -2714,430 +2949,279 @@ function renderResult(){
         </div>
     `;
 
-    const printButton=
-        $("printResultButton");
-
-    if(printButton){
-        printButton.onclick=
-            printScorePDF;
-    }
-}
-
-function renderPartScoreHTML(){
-
-    return currentTest.parts
-        .map((part,index)=>{
-
-            const score=
-                scoreData.partScores[index]||0;
-
-            const total=
-                scoreData.partTotals[index]||0;
-
-            const percentage=
-                total
-                    ?Math.round(
-                        (score/total)*100
-                    )
-                    :0;
-
-            return `
-
-                <div class="part-score-card">
-
-                    <div class="part-score-top">
-
-                        <strong>
-                            Part ${index+1}
-                        </strong>
-
-                        <span>
-                            ${score} / ${total}
-                        </span>
-
-                    </div>
-
-                    <div class="mini-progress">
-
-                        <span
-                            style="width:${percentage}%"
-                        ></span>
-
-                    </div>
-
-                    <small>
-                        ${percentage}% correct
-                    </small>
-
-                </div>
-
-            `;
-        })
-        .join("");
-}
-
-function renderReviewHTML(){
-
-    return getAllQuestions()
-        .map(question=>{
-
-            const number=
-                question.number;
-
-            const user=
-                submittedAnswers[
-                    number
-                ];
-
-            const correct=
-                getCorrectAnswer(
-                    question
-                );
-
-            const answered=
-                isAnswered(user);
-
-            const correctAnswer=
-                answered&&
-                answersMatch(
-                    user,
-                    correct
-                );
-
-            let status=
-                "unanswered";
-
-            if(correctAnswer){
-                status="correct";
-            }else if(answered){
-                status="incorrect";
-            }
-
-            return `
-
-                <div class="review-item ${status}">
-
-                    <div class="review-item-top">
-
-                        <span class="review-number">
-                            Q${escapeHTML(
-                                getPlainText(number)
-                            )}
-                        </span>
-
-                        <span class="review-status">
-                            ${
-                                status==="correct"
-                                    ?"Correct"
-                                    :status==="incorrect"
-                                    ?"Incorrect"
-                                    :"Unanswered"
-                            }
-                        </span>
-
-                    </div>
-
-                    <div class="review-question">
-
-                        ${escapeHTML(
-                            getPlainText(
-                                question.question||
-                                question.text||
-                                question.prompt||
-                                question.statement||
-                                ""
-                            )
-                        )}
-
-                    </div>
-
-                    <div class="review-answer">
-
-                        <div>
-
-                            <small>
-                                Your answer
-                            </small>
-
-                            <strong>
-                                ${
-                                    answered
-                                        ?escapeHTML(
-                                            formatAnswer(user)
-                                        )
-                                        :"No answer"
-                                }
-                            </strong>
-
-                        </div>
-
-                        <div>
-
-                            <small>
-                                Correct answer
-                            </small>
-
-                            <strong>
-                                ${escapeHTML(
-                                    formatAnswer(
-                                        correct
-                                    )
-                                )}
-                            </strong>
-
-                        </div>
-
-                    </div>
-
-                </div>
-            `;
-        })
-        .join("");
-}
-
-/* =========================================================
-   START AGAIN
-========================================================= */
-
-function startAgainFromResult(){
-
-    if(!currentTest)return;
-
-    studentAnswers={};
-    submittedAnswers={};
-    scoreData=null;
-    testSubmitted=false;
-    currentPartIndex=0;
-
-    startTest();
-}
-
-/* =========================================================
-   PRINT RESULT / PDF
-========================================================= */
-
-function printScorePDF(){
-
-    if(
-        !scoreData||
-        !currentTest
-    ){
-
-        alert(
-            "Please submit the test before printing the score report."
+    $("generatedPrintButton")
+        ?.addEventListener(
+            "click",
+            printScorePDF
         );
 
-        return;
+    $("generatedPrintButton2")
+        ?.addEventListener(
+            "click",
+            printScorePDF
+        );
+
+    $("generatedRestartButton")
+        ?.addEventListener(
+            "click",
+            restartCurrentTest
+        );
+}
+
+function resultStat(label, value) {
+
+    return `
+        <div class="result-stat">
+
+            <span>
+                ${escapeHTML(label)}
+            </span>
+
+            <strong>
+                ${escapeHTML(value)}
+            </strong>
+
+        </div>
+    `;
+}
+
+/* =========================================================
+   REVIEW QUESTIONS
+========================================================= */
+
+function getAllReviewQuestions() {
+
+    const result = [];
+
+    (currentTest.parts || [])
+        .forEach(part => {
+
+            (part.questionGroups || [])
+                .forEach(group => {
+
+                    const questions = [
+                        ...(group.questions || []),
+                        ...(group.blanks || [])
+                    ];
+
+                    questions.forEach(question => {
+
+                        result.push({
+                            number:
+                                question.number,
+
+                            text:
+                                question.text || "",
+
+                            given:
+                                submittedAnswers[
+                                    question.number
+                                ],
+
+                            correct:
+                                question.answer
+                        });
+                    });
+                });
+        });
+
+    return result.sort(
+        (a, b) =>
+            Number(a.number) -
+            Number(b.number)
+    );
+}
+
+function renderReviewItem(item) {
+
+    const correct =
+        answersMatch(
+            item.given,
+            item.correct
+        );
+
+    const answered =
+        isAnswered(item.given);
+
+    const status =
+        correct
+            ? "correct"
+            : answered
+                ? "incorrect"
+                : "unanswered";
+
+    return `
+        <div class="review-item ${status}">
+
+            <div class="review-number">
+                ${escapeHTML(item.number)}
+            </div>
+
+            <div class="review-content">
+
+                <div class="review-question">
+                    ${formatQuestionText(item.text)}
+                </div>
+
+                <div class="review-answer">
+
+                    <strong>
+                        Your answer:
+                    </strong>
+
+                    <span>
+                        ${
+                            answered
+                                ? escapeHTML(
+                                    formatAnswer(
+                                        item.given
+                                    )
+                                )
+                                : "(No answer)"
+                        }
+                    </span>
+
+                </div>
+
+                <div class="review-answer">
+
+                    <strong>
+                        Correct answer:
+                    </strong>
+
+                    <span>
+                        ${escapeHTML(
+                            formatAnswer(
+                                item.correct
+                            )
+                        )}
+                    </span>
+
+                </div>
+
+            </div>
+
+        </div>
+    `;
+}
+
+function formatAnswer(value) {
+
+    if (
+        value === undefined ||
+        value === null ||
+        value === ""
+    ) {
+        return "(No answer)";
     }
 
-    const score=
-        scoreData.totalScore;
+    if (Array.isArray(value)) {
+        return value.join(", ");
+    }
 
-    const total=
+    if (
+        typeof value === "object"
+    ) {
+
+        return (
+            value.letter ??
+            value.text ??
+            value.value ??
+            JSON.stringify(value)
+        );
+    }
+
+    return String(value);
+}
+
+/* =========================================================
+   RESTART / DASHBOARD
+========================================================= */
+
+function restartCurrentTest() {
+
+    if (!currentTest) return;
+
+    clearSavedAnswers();
+
+    studentAnswers = {};
+
+    submittedAnswers = {};
+
+    testSubmitted = false;
+
+    currentPartIndex = 0;
+
+    testStarted = false;
+
+    showTestIntroduction();
+}
+
+function backToDashboard() {
+
+    stopTimer();
+
+    currentTest = null;
+
+    currentTestNumber = null;
+
+    studentAnswers = {};
+
+    submittedAnswers = {};
+
+    testSubmitted = false;
+
+    testStarted = false;
+
+    renderTestCards();
+
+    showScreen("dashboardScreen");
+}
+
+/* =========================================================
+   PRINT / SAVE PDF
+========================================================= */
+
+function printScorePDF() {
+
+    if (!scoreData) return;
+
+    const total =
         scoreData.totalQuestions;
 
-    const answered=
+    const score =
+        scoreData.totalScore;
+
+    const answered =
         countAnsweredAnswers(
             submittedAnswers
         );
 
-    const incorrect=
+    const incorrect =
         Math.max(
             0,
-            answered-score
+            answered - score
         );
 
-    const unanswered=
+    const unanswered =
         Math.max(
             0,
-            total-answered
+            total - answered
         );
 
-    const accuracy=
+    const accuracy =
         answered
-            ?Math.round(
-                (score/answered)*100
+            ? Math.round(
+                score /
+                answered *
+                100
             )
-            :0;
+            : 0;
 
-    const title=
-        currentTest.title||
-        `IELTS Reading Test ${currentTestNumber}`;
+    const review =
+        getAllReviewQuestions();
 
-    const parts=
-        currentTest.parts
-        .map((part,index)=>{
-
-            const partScore=
-                scoreData.partScores[index]||0;
-
-            const partTotal=
-                scoreData.partTotals[index]||0;
-
-            const percentage=
-                partTotal
-                    ?Math.round(
-                        (partScore/partTotal)*100
-                    )
-                    :0;
-
-            return `
-
-                <div class="part-card">
-
-                    <div class="part-card-header">
-
-                        <strong>
-                            Part ${index+1}
-                        </strong>
-
-                        <span>
-                            ${partScore} /
-                            ${partTotal}
-                        </span>
-
-                    </div>
-
-                    <div class="bar">
-
-                        <span
-                            style="width:${percentage}%"
-                        ></span>
-
-                    </div>
-
-                    <small>
-                        ${percentage}% correct
-                    </small>
-
-                </div>
-            `;
-        })
-        .join("");
-
-    const reviews=
-        getAllQuestions()
-        .map(question=>{
-
-            const number=
-                question.number;
-
-            const user=
-                submittedAnswers[number];
-
-            const correct=
-                getCorrectAnswer(question);
-
-            const answeredQuestion=
-                isAnswered(user);
-
-            const isCorrect=
-                answeredQuestion&&
-                answersMatch(
-                    user,
-                    correct
-                );
-
-            const status=
-                isCorrect
-                    ?"Correct"
-                    :answeredQuestion
-                    ?"Incorrect"
-                    :"Unanswered";
-
-            return `
-
-                <div class="print-review ${status.toLowerCase()}">
-
-                    <div class="review-title">
-
-                        <strong>
-                            Q${escapeHTML(
-                                getPlainText(number)
-                            )}
-                        </strong>
-
-                        <span>
-                            ${status}
-                        </span>
-
-                    </div>
-
-                    <p>
-                        ${escapeHTML(
-                            getPlainText(
-                                question.question||
-                                question.text||
-                                question.prompt||
-                                question.statement||
-                                ""
-                            )
-                        )}
-                    </p>
-
-                    <div class="answers">
-
-                        <div>
-
-                            <b>
-                                Your answer
-                            </b>
-
-                            <span>
-                                ${
-                                    answeredQuestion
-                                        ?escapeHTML(
-                                            formatAnswer(user)
-                                        )
-                                        :"No answer"
-                                }
-                            </span>
-
-                        </div>
-
-                        <div>
-
-                            <b>
-                                Correct answer
-                            </b>
-
-                            <span>
-                                ${escapeHTML(
-                                    formatAnswer(
-                                        correct
-                                    )
-                                )}
-                            </span>
-
-                        </div>
-
-                    </div>
-
-                </div>
-            `;
-        })
-        .join("");
-
-    const printWindow=
-        window.open(
-            "",
-            "_blank",
-            "width=1000,height=900"
-        );
-
-    if(!printWindow){
-
-        alert(
-            "The print window was blocked. Please allow pop-ups for this website and try again."
-        );
-
-        return;
-    }
-
-    printWindow.document.open();
-
-    printWindow.document.write(`
-
+    const html = `
 <!DOCTYPE html>
 
 <html>
@@ -3152,258 +3236,148 @@ IELTS Reading Result
 
 <style>
 
-@page{
-    size:A4;
-    margin:14mm;
+* {
+    box-sizing: border-box;
 }
 
-*{
-    box-sizing:border-box;
+body {
+    font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+    margin: 0;
+
+    padding: 35px;
+
+    color: #222;
+
+    background: #fff;
 }
 
-body{
-    margin:0;
-    background:#fff;
-    color:#222;
-    font-family:Arial,Helvetica,sans-serif;
-    line-height:1.5;
+h1 {
+    margin: 0 0 8px;
 }
 
-.report{
-    width:100%;
-    max-width:900px;
-    margin:auto;
+h2 {
+    margin-top: 30px;
 }
 
-.header{
-    text-align:center;
-    border-bottom:2px solid #383838;
-    padding-bottom:20px;
-    margin-bottom:25px;
+.header {
+    border-bottom:
+        2px solid #222;
+
+    padding-bottom: 20px;
 }
 
-.kicker{
-    font-size:11px;
-    font-weight:bold;
-    letter-spacing:2px;
-    color:#777;
+.kicker {
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
 }
 
-h1{
-    margin:5px 0;
-    font-size:30px;
+.subtitle {
+    color: #666;
 }
 
-.subtitle{
-    margin:0;
-    color:#777;
+.score {
+    margin-top: 25px;
+    padding: 25px;
+    border: 1px solid #ddd;
+    border-radius: 15px;
 }
 
-.hero{
-    display:flex;
-    align-items:center;
-    gap:30px;
-    border:1px solid #ddd;
-    border-radius:15px;
-    padding:25px;
-    margin-bottom:20px;
+.score-number {
+    font-size: 42px;
+    font-weight: bold;
 }
 
-.score-circle{
-    width:125px;
-    height:125px;
-    min-width:125px;
-    border-radius:50%;
-    border:10px solid #383838;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
+.band {
+    font-size: 24px;
+    margin-top: 10px;
 }
 
-.score-circle strong{
-    font-size:34px;
-    line-height:1;
+.stats {
+    display: grid;
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    gap: 12px;
+
+    margin-top: 20px;
 }
 
-.score-circle span{
-    color:#777;
-    font-size:13px;
+.stat {
+    border:
+        1px solid #ddd;
+
+    border-radius:
+        10px;
+
+    padding:
+        15px;
 }
 
-.band{
-    display:inline-block;
-    background:#383838;
-    color:white;
-    padding:5px 12px;
-    border-radius:20px;
-    font-size:12px;
-    font-weight:bold;
+.stat strong {
+    display: block;
+    font-size: 22px;
+    margin-top: 5px;
 }
 
-.hero h2{
-    margin:8px 0;
+.part {
+    display: flex;
+    justify-content: space-between;
+    border-bottom:
+        1px solid #ddd;
+    padding: 10px 0;
 }
 
-.hero p{
-    margin:4px 0;
-    color:#555;
+.review {
+    border:
+        1px solid #ddd;
+
+    border-radius:
+        10px;
+
+    padding:
+        15px;
+
+    margin:
+        10px 0;
+
+    page-break-inside:
+        avoid;
 }
 
-.stats{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    border:1px solid #ddd;
-    border-radius:12px;
-    overflow:hidden;
-    margin-bottom:30px;
+.review.correct {
+    border-left:
+        5px solid #222;
 }
 
-.stat{
-    text-align:center;
-    padding:18px 8px;
-    border-right:1px solid #ddd;
+.review.incorrect {
+    border-left:
+        5px solid #777;
 }
 
-.stat:last-child{
-    border-right:0;
+.review.unanswered {
+    border-left:
+        5px solid #bbb;
 }
 
-.stat strong{
-    display:block;
-    font-size:23px;
+.answer {
+    margin-top: 8px;
 }
 
-.stat span{
-    color:#777;
-    font-size:12px;
-}
+@media print {
 
-.section{
-    margin-top:30px;
-}
-
-.section h2{
-    font-size:20px;
-    margin-bottom:15px;
-}
-
-.parts{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:12px;
-}
-
-.part-card{
-    border:1px solid #ddd;
-    border-radius:10px;
-    padding:14px;
-}
-
-.part-card-header{
-    display:flex;
-    justify-content:space-between;
-    margin-bottom:10px;
-}
-
-.bar{
-    height:8px;
-    background:#eee;
-    border-radius:20px;
-    overflow:hidden;
-    margin-bottom:6px;
-}
-
-.bar span{
-    display:block;
-    height:100%;
-    background:#383838;
-}
-
-.part-card small{
-    color:#777;
-}
-
-.print-review{
-    border:1px solid #ddd;
-    border-radius:10px;
-    padding:15px;
-    margin-bottom:12px;
-    page-break-inside:avoid;
-}
-
-.print-review.correct{
-    border-left:5px solid #388e3c;
-}
-
-.print-review.incorrect{
-    border-left:5px solid #d32f2f;
-}
-
-.print-review.unanswered{
-    border-left:5px solid #777;
-}
-
-.review-title{
-    display:flex;
-    justify-content:space-between;
-    margin-bottom:8px;
-}
-
-.review-title span{
-    font-size:11px;
-    padding:3px 8px;
-    background:#eee;
-    border-radius:15px;
-}
-
-.print-review p{
-    margin:7px 0 12px;
-}
-
-.answers{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:10px;
-}
-
-.answers div{
-    background:#f7f7f7;
-    padding:10px;
-    border-radius:7px;
-}
-
-.answers b,
-.answers span{
-    display:block;
-}
-
-.answers b{
-    font-size:10px;
-    color:#777;
-    text-transform:uppercase;
-    margin-bottom:4px;
-}
-
-.footer{
-    margin-top:30px;
-    padding-top:15px;
-    border-top:1px solid #ddd;
-    text-align:center;
-    font-size:11px;
-    color:#777;
-}
-
-@media print{
-
-    body{
-        -webkit-print-color-adjust:exact;
-        print-color-adjust:exact;
+    body {
+        padding: 15px;
     }
 
-    .print-review{
-        page-break-inside:avoid;
+    button {
+        display: none !important;
     }
+
 }
 
 </style>
@@ -3412,669 +3386,644 @@ h1{
 
 <body>
 
-<div class="report">
+<div class="header">
 
-    <div class="header">
-
-        <div class="kicker">
-            IELTS READING
-        </div>
-
-        <h1>
-            ${escapeHTML(
-                getPlainText(title)
-            )}
-        </h1>
-
-        <p class="subtitle">
-            Reading Test Result Report
-        </p>
-
+    <div class="kicker">
+        IELTS READING
     </div>
 
-    <div class="hero">
+    <h1>
+        Test Result
+    </h1>
 
-        <div class="score-circle">
-
-            <strong>
-                ${score}
-            </strong>
-
-            <span>
-                / ${total}
-            </span>
-
-        </div>
-
-        <div>
-
-            <span class="band">
-                Estimated Band
-                ${Number(
-                    scoreData.band
-                ).toFixed(1)}
-            </span>
-
-            <h2>
-                Test Completed
-            </h2>
-
-            <p>
-                Time used:
-                <strong>
-                    ${scoreData.timeUsed}
-                </strong>
-            </p>
-
-            <p>
-                Accuracy:
-                <strong>
-                    ${accuracy}%
-                </strong>
-            </p>
-
-        </div>
-
-    </div>
-
-    <div class="stats">
-
-        <div class="stat">
-            <strong>${score}</strong>
-            <span>Correct</span>
-        </div>
-
-        <div class="stat">
-            <strong>${incorrect}</strong>
-            <span>Incorrect</span>
-        </div>
-
-        <div class="stat">
-            <strong>${unanswered}</strong>
-            <span>Unanswered</span>
-        </div>
-
-        <div class="stat">
-            <strong>${accuracy}%</strong>
-            <span>Accuracy</span>
-        </div>
-
-    </div>
-
-    <div class="section">
-
-        <h2>
-            Part-by-Part Score
-        </h2>
-
-        <div class="parts">
-            ${parts}
-        </div>
-
-    </div>
-
-    <div class="section">
-
-        <h2>
-            Question Review
-        </h2>
-
-        ${reviews}
-
-    </div>
-
-    <div class="footer">
-        IELTS Reading Practice
+    <div class="subtitle">
+        ${escapeHTML(
+            currentTest.title ||
+            `IELTS Reading Test ${currentTestNumber}`
+        )}
     </div>
 
 </div>
 
+<div class="score">
+
+    <div class="score-number">
+        ${score} / ${total}
+    </div>
+
+    <div>
+        Accuracy: ${accuracy}%
+    </div>
+
+    <div class="band">
+        Estimated IELTS Band:
+        <strong>
+            ${Number(scoreData.band).toFixed(1)}
+        </strong>
+    </div>
+
+    <div>
+        Time used:
+        ${escapeHTML(scoreData.timeUsed)}
+    </div>
+
+</div>
+
+<div class="stats">
+
+    <div class="stat">
+        Correct
+        <strong>${score}</strong>
+    </div>
+
+    <div class="stat">
+        Incorrect
+        <strong>${incorrect}</strong>
+    </div>
+
+    <div class="stat">
+        Unanswered
+        <strong>${unanswered}</strong>
+    </div>
+
+    <div class="stat">
+        Accuracy
+        <strong>${accuracy}%</strong>
+    </div>
+
+</div>
+
+<h2>
+    Part Scores
+</h2>
+
+${
+    scoreData.partScores
+        .map(
+            (value, index) => `
+                <div class="part">
+                    <span>
+                        Part ${index + 1}
+                    </span>
+                    <strong>
+                        ${value}
+                        /
+                        ${scoreData.partTotals[index]}
+                    </strong>
+                </div>
+            `
+        )
+        .join("")
+}
+
+<h2>
+    Question Review
+</h2>
+
+${
+    review
+        .map(item => {
+
+            const correct =
+                answersMatch(
+                    item.given,
+                    item.correct
+                );
+
+            const answered =
+                isAnswered(
+                    item.given
+                );
+
+            const status =
+                correct
+                    ? "correct"
+                    : answered
+                        ? "incorrect"
+                        : "unanswered";
+
+            return `
+                <div class="review ${status}">
+
+                    <strong>
+                        Question ${escapeHTML(item.number)}
+                    </strong>
+
+                    <p>
+                        ${formatQuestionText(item.text)}
+                    </p>
+
+                    <div class="answer">
+                        <strong>
+                            Your answer:
+                        </strong>
+                        ${
+                            answered
+                                ? escapeHTML(
+                                    formatAnswer(
+                                        item.given
+                                    )
+                                )
+                                : "(No answer)"
+                        }
+                    </div>
+
+                    <div class="answer">
+                        <strong>
+                            Correct answer:
+                        </strong>
+                        ${escapeHTML(
+                            formatAnswer(
+                                item.correct
+                            )
+                        )}
+                    </div>
+
+                </div>
+            `;
+
+        })
+        .join("")
+}
+
 </body>
 
 </html>
+`;
 
-    `);
+    const printWindow =
+        window.open(
+            "",
+            "_blank",
+            "width=1000,height=800"
+        );
 
-    printWindow.document.close();
+    if (!printWindow) {
 
-    /*
-       Firefox/Chrome:
-       Wait until the new document has rendered,
-       then explicitly trigger print.
-    */
+        showToast(
+            "Please allow pop-ups to print the result."
+        );
 
-    setTimeout(()=>{
-
-        try{
-
-            printWindow.focus();
-
-            printWindow.print();
-
-        }catch(error){
-
-            console.error(
-                "Print error:",
-                error
-            );
-        }
-
-    },1000);
-}
-
-/* =========================================================
-   PUBLIC API
-========================================================= */
-
-function getAllQuestionNumbers(){
-
-    return getAllQuestions()
-        .map(q=>Number(q.number))
-        .filter(Number.isFinite)
-        .sort((a,b)=>a-b);
-}
-
-window.IELTSReading={
-
-    openTest,
-
-    startTest,
-
-    submitTest,
-
-    calculateScore,
-
-    calculateIELTSBand,
-
-    showDashboard,
-
-    printScorePDF,
-
-    getCurrentTest:
-        ()=>currentTest,
-
-    getAnswers:
-        ()=>studentAnswers,
-
-    getSubmittedAnswers:
-        ()=>submittedAnswers,
-
-    getQuestionNumbers:
-        getAllQuestionNumbers
-};
-
-/* =========================================================
-   STYLES
-========================================================= */
-
-function injectStyles(){
-
-    if($("ieltsReadingInjectedStyles")){
         return;
     }
 
-    const style=
+    printWindow.document.open();
+
+    printWindow.document.write(
+        html
+    );
+
+    printWindow.document.close();
+
+    setTimeout(() => {
+
+        printWindow.focus();
+
+        printWindow.print();
+
+    }, 500);
+}
+
+/* =========================================================
+   PANEL SCROLL
+========================================================= */
+
+function scrollPanelsTop() {
+
+    [
+        "passagePanel",
+        "questionPanel",
+        "passageContent",
+        "questionsContent"
+    ]
+    .forEach(id => {
+
+        const el = $(id);
+
+        if (el) {
+            el.scrollTop = 0;
+        }
+    });
+}
+
+/* =========================================================
+   CSS FIXES
+   These are injected so the JS works even if the existing
+   CSS is missing some drag/drop/select styles.
+========================================================= */
+
+function injectStyles() {
+
+    if ($("appJsFixStyles")) return;
+
+    const style =
         document.createElement("style");
 
-    style.id=
-        "ieltsReadingInjectedStyles";
-
-    style.textContent=`
-
-.reading-result-report{
-    max-width:1100px;
-    margin:0 auto;
-    padding:30px 20px 60px;
-}
-
-.results-heading{
-    text-align:center;
-    margin-bottom:30px;
-}
-
-.results-kicker{
-    font-size:12px;
-    font-weight:700;
-    letter-spacing:2px;
-    opacity:.6;
-}
-
-.results-heading h1{
-    margin:8px 0;
-    font-size:32px;
-}
-
-.results-heading p{
-    color:#777;
-}
-
-.print-score-button,
-.primary-btn,
-.secondary-btn{
-    border:0;
-    border-radius:9px;
-    padding:11px 18px;
-    cursor:pointer;
-    font-weight:600;
-}
-
-.print-score-button,
-.primary-btn{
-    background:#383838;
-    color:white;
-}
-
-.secondary-btn{
-    background:#eee;
-    color:#333;
-}
-
-.result-hero{
-    display:flex;
-    align-items:center;
-    gap:30px;
-    padding:30px;
-    border:1px solid #ddd;
-    border-radius:18px;
-    margin-bottom:20px;
-}
-
-.score-ring{
-    width:150px;
-    height:150px;
-    min-width:150px;
-    border-radius:50%;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    background:#383838;
-}
-
-.score-ring-inner{
-    width:126px;
-    height:126px;
-    border-radius:50%;
-    background:white;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    flex-direction:column;
-}
-
-.score-ring-inner strong{
-    font-size:38px;
-    line-height:1;
-}
-
-.score-ring-inner span{
-    color:#777;
-}
-
-.status-pill{
-    display:inline-block;
-    padding:5px 12px;
-    border-radius:20px;
-    background:#383838;
-    color:white;
-    font-size:12px;
-    font-weight:600;
-}
-
-.hero-copy h2{
-    margin:10px 0;
-}
-
-.hero-copy p{
-    margin:5px 0;
-    color:#666;
-}
-
-.result-summary{
-    display:grid;
-    grid-template-columns:repeat(4,1fr);
-    border:1px solid #ddd;
-    border-radius:14px;
-    overflow:hidden;
-    margin-bottom:35px;
-}
-
-.summary-stat{
-    text-align:center;
-    padding:20px 10px;
-    border-right:1px solid #ddd;
-}
-
-.summary-stat:last-child{
-    border-right:0;
-}
-
-.summary-stat strong{
-    display:block;
-    font-size:25px;
-}
-
-.summary-stat span{
-    font-size:12px;
-    color:#777;
-}
-
-.result-section{
-    margin-top:35px;
-}
-
-.result-section h2{
-    margin-bottom:8px;
-}
-
-.part-score-grid{
-    display:grid;
-    grid-template-columns:repeat(3,1fr);
-    gap:15px;
-}
-
-.part-score-card{
-    border:1px solid #ddd;
-    border-radius:12px;
-    padding:16px;
-}
-
-.part-score-top{
-    display:flex;
-    justify-content:space-between;
-    margin-bottom:12px;
-}
-
-.mini-progress{
-    width:100%;
-    height:8px;
-    background:#eee;
-    border-radius:20px;
-    overflow:hidden;
-}
-
-.mini-progress span{
-    display:block;
-    height:100%;
-    background:#383838;
-}
-
-.part-score-card small{
-    display:block;
-    margin-top:7px;
-    color:#777;
-}
-
-.review-header{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:20px;
-    margin-bottom:15px;
-}
-
-.review-header p{
-    color:#777;
-}
-
-.legend{
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    font-size:12px;
-}
-
-.legend span{
-    display:flex;
-    align-items:center;
-    gap:5px;
-}
-
-.legend-dot{
-    width:9px;
-    height:9px;
-    border-radius:50%;
-    display:inline-block;
-}
-
-.legend-dot.correct{
-    background:#388e3c;
-}
-
-.legend-dot.incorrect{
-    background:#d32f2f;
-}
-
-.legend-dot.unanswered{
-    background:#777;
-}
-
-.review-grid{
-    display:grid;
-    gap:12px;
-}
-
-.review-item{
-    border:1px solid #ddd;
-    border-left:5px solid #777;
-    border-radius:10px;
-    padding:15px;
-}
-
-.review-item.correct{
-    border-left-color:#388e3c;
-}
-
-.review-item.incorrect{
-    border-left-color:#d32f2f;
-}
-
-.review-item.unanswered{
-    border-left-color:#777;
-}
-
-.review-item-top{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:10px;
-}
-
-.review-number{
-    font-weight:700;
-}
-
-.review-status{
-    font-size:11px;
-    padding:4px 9px;
-    border-radius:15px;
-    background:#eee;
-}
-
-.review-question{
-    margin-bottom:12px;
-}
-
-.review-answer{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:10px;
-}
-
-.review-answer div{
-    background:#f7f7f7;
-    padding:10px;
-    border-radius:8px;
-}
-
-.review-answer small,
-.review-answer strong{
-    display:block;
-}
-
-.review-answer small{
-    color:#777;
-    font-size:10px;
-    text-transform:uppercase;
-    margin-bottom:4px;
-}
-
-.results-actions{
-    display:flex;
-    justify-content:center;
-    gap:12px;
-    margin-top:35px;
-}
-
-.question-item{
-    display:flex;
-    gap:12px;
-    padding:12px 0;
-    border-bottom:1px solid #eee;
-}
-
-.question-number{
-    font-weight:700;
-    min-width:30px;
-}
-
-.question-body{
-    flex:1;
-}
-
-.question-text{
-    margin-bottom:10px;
-}
-
-.choice-option{
-    display:flex;
-    align-items:flex-start;
-    gap:8px;
-    margin:7px 0;
-    cursor:pointer;
-}
-
-.answer-input,
-.answer-select{
-    width:100%;
-    max-width:450px;
-    padding:10px 12px;
-    border:1px solid #ccc;
-    border-radius:7px;
-    background:white;
-}
-
-.word-bank{
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-    margin:15px 0;
-}
-
-.drag-option{
-    padding:8px 12px;
-    border:1px solid #bbb;
-    background:white;
-    border-radius:7px;
-    cursor:grab;
-}
-
-.drag-option.selected{
-    background:#383838;
-    color:white;
-}
-
-.summary-blank{
-    margin:8px 0;
-}
-
-.drop-answer{
-    display:inline-block;
-    min-width:110px;
-    border-bottom:2px solid #383838;
-    padding:3px 8px;
-    cursor:pointer;
-}
-
-.vocabulary-word{
-    cursor:pointer;
-    border-bottom:1px dotted currentColor;
-}
-
-.timer-warning{
-    color:#d32f2f!important;
-    font-weight:700;
-}
-
-@media(max-width:700px){
-
-    .result-hero{
-        flex-direction:column;
-        text-align:center;
-    }
-
-    .result-summary{
-        grid-template-columns:repeat(2,1fr);
-    }
-
-    .summary-stat:nth-child(2){
-        border-right:0;
-    }
-
-    .part-score-grid{
-        grid-template-columns:1fr;
-    }
-
-    .review-header{
-        flex-direction:column;
-        align-items:flex-start;
-    }
-
-    .review-answer{
-        grid-template-columns:1fr;
-    }
-
-    .results-actions{
-        flex-direction:column;
-    }
-
-    .results-actions button{
-        width:100%;
-    }
-}
-
-@media print{
-
-    .print-score-button,
-    .results-actions{
-        display:none!important;
-    }
-
-    .reading-result-report{
-        padding:0;
-    }
-}
-
-`;
+    style.id =
+        "appJsFixStyles";
+
+    style.textContent = `
+
+        .question-group {
+            margin-bottom: 30px;
+        }
+
+        .group-heading {
+            margin-bottom: 18px;
+        }
+
+        .question-card {
+            display: flex;
+            gap: 14px;
+            margin: 12px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+
+        .question-number {
+            min-width: 34px;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-weight: 700;
+            background: #383838;
+            color: white;
+        }
+
+        .question-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .question-text {
+            margin-bottom: 10px;
+            line-height: 1.6;
+        }
+
+        .question-control {
+            width: 100%;
+        }
+
+        .question-select,
+        .answer-input {
+            width: 100%;
+            max-width: 420px;
+            min-height: 42px;
+            padding: 9px 12px;
+            border: 1px solid #bbb;
+            border-radius: 8px;
+            background: white;
+            font-size: 15px;
+        }
+
+        .multiple-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 8px 0;
+            cursor: pointer;
+        }
+
+        .drag-option-bank {
+            margin: 15px 0;
+            padding: 15px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+        }
+
+        .drag-bank-title {
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .drag-options,
+        .drag-option-bank > div:not(.drag-bank-title) {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .drag-option,
+        .summary-drag-word {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 40px;
+            padding: 8px 14px;
+            border-radius: 8px;
+            border: 1px solid #aaa;
+            background: white;
+            cursor: grab;
+            user-select: none;
+        }
+
+        .drag-option:hover,
+        .summary-drag-word:hover,
+        .drag-option.selected,
+        .summary-drag-word.selected {
+            transform: translateY(-1px);
+            border-color: #383838;
+        }
+
+        .drag-option.dragging,
+        .summary-drag-word.dragging {
+            opacity: .45;
+        }
+
+        .drag-question,
+        .summary-blank-row {
+            margin: 14px 0;
+        }
+
+        .drag-question-text,
+        .summary-blank-text {
+            margin-bottom: 8px;
+            line-height: 1.6;
+        }
+
+        .drag-drop-zone,
+        .summary-drop-zone {
+            min-height: 48px;
+            border: 2px dashed #aaa;
+            border-radius: 8px;
+            padding: 8px 12px;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            background: #fafafa;
+        }
+
+        .drag-drop-zone.drag-over,
+        .summary-drop-zone.drag-over {
+            border-color: #383838;
+            background: #f0f0f0;
+        }
+
+        .drop-placeholder {
+            color: #888;
+        }
+
+        .dropped-answer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            gap: 10px;
+        }
+
+        .remove-dropped-answer {
+            border: 0;
+            background: transparent;
+            cursor: pointer;
+            font-size: 20px;
+            line-height: 1;
+        }
+
+        .question-nav-button {
+            min-width: 34px;
+            min-height: 34px;
+            margin: 3px;
+            border: 1px solid #bbb;
+            background: white;
+            border-radius: 7px;
+            cursor: pointer;
+        }
+
+        .question-nav-button.answered {
+            background: #383838;
+            color: white;
+        }
+
+        .question-nav-button.current {
+            outline: 2px solid #d0a557;
+        }
+
+        .question-highlight {
+            animation: questionHighlight 1s ease;
+        }
+
+        @keyframes questionHighlight {
+            0% {
+                background: rgba(208,165,87,.25);
+            }
+            100% {
+                background: transparent;
+            }
+        }
+
+        .timer-warning {
+            color: #c62828 !important;
+            font-weight: 700;
+        }
+
+        .results-page {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 30px 20px;
+        }
+
+        .results-heading {
+            margin-bottom: 25px;
+        }
+
+        .results-kicker {
+            font-size: 12px;
+            letter-spacing: 2px;
+            font-weight: 700;
+        }
+
+        .result-hero {
+            display: flex;
+            align-items: center;
+            gap: 25px;
+            padding: 25px;
+            border-radius: 18px;
+            border: 1px solid #ddd;
+        }
+
+        .score-ring {
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            border: 10px solid #383838;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .score-ring strong {
+            font-size: 25px;
+        }
+
+        .score-ring span {
+            font-size: 13px;
+            color: #777;
+        }
+
+        .status-pill {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: #383838;
+            color: white;
+            font-size: 12px;
+        }
+
+        .result-summary {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin: 20px 0;
+        }
+
+        .result-stat {
+            padding: 18px;
+            border-radius: 12px;
+            border: 1px solid #ddd;
+        }
+
+        .result-stat span {
+            display: block;
+            color: #777;
+            font-size: 13px;
+        }
+
+        .result-stat strong {
+            display: block;
+            margin-top: 5px;
+            font-size: 24px;
+        }
+
+        .part-score-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .review-grid {
+            display: grid;
+            gap: 12px;
+        }
+
+        .review-item {
+            display: flex;
+            gap: 14px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+        }
+
+        .review-item.correct {
+            border-left: 5px solid #333;
+        }
+
+        .review-item.incorrect {
+            border-left: 5px solid #999;
+        }
+
+        .review-item.unanswered {
+            border-left: 5px solid #ccc;
+        }
+
+        .review-number {
+            font-weight: 700;
+            min-width: 30px;
+        }
+
+        .review-answer {
+            margin-top: 7px;
+        }
+
+        .result-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 25px;
+        }
+
+        .result-actions button,
+        .print-result-button {
+            padding: 11px 18px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            cursor: pointer;
+            background: #383838;
+            color: white;
+        }
+
+        .vocabulary-word {
+            cursor: pointer;
+            border-bottom: 1px dotted currentColor;
+        }
+
+        #vocabularyPopup {
+            position: fixed;
+            z-index: 99999;
+            max-width: 320px;
+            padding: 18px;
+            border-radius: 12px;
+            background: white;
+            color: #222;
+            box-shadow: 0 10px 40px rgba(0,0,0,.25);
+            border: 1px solid #ddd;
+            right: 20px;
+            bottom: 20px;
+        }
+
+        .vocab-close {
+            float: right;
+            border: 0;
+            background: transparent;
+            font-size: 20px;
+            cursor: pointer;
+        }
+
+        @media (max-width: 700px) {
+
+            .result-summary {
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+            .result-hero {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .question-card {
+                padding: 10px;
+            }
+
+            .question-number {
+                min-width: 30px;
+            }
+
+            .result-actions {
+                flex-direction: column;
+            }
+
+            .drag-option,
+            .summary-drag-word {
+                flex: 1 1 auto;
+            }
+        }
+
+        @media print {
+
+            .print-result-button,
+            .result-actions {
+                display: none !important;
+            }
+        }
+    `;
 
     document.head.appendChild(style);
 }
 
 /* =========================================================
-   CSS ESCAPE FALLBACK
+   END
 ========================================================= */
-
-if(!window.CSS){
-    window.CSS={};
-}
-
-if(!window.CSS.escape){
-
-    window.CSS.escape=function(value){
-
-        return String(value)
-            .replace(
-                /[^a-zA-Z0-9_-]/g,
-                "\\$&"
-            );
-    };
-}
