@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IELTS Listening Practice</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">IELTS Listening Practice</div>
+  <div class="test-info"><span id="partLabel">Part 1</span><span class="divider">|</span><strong id="timer">30:00</strong></div>
+</header>
+<div class="instructions-bar">
+  <strong>Listening</strong><span>Part <span id="partNumber">1</span> of 4</span><span id="progressText">Questions 1–10</span>
+</div>
+<main class="test-shell">
+  <aside class="question-panel">
+    <div class="panel-title">Questions</div>
+    <div id="questionNav" class="question-nav"></div>
+    <div class="part-nav">
+      <button id="prevPart" class="secondary-btn" disabled>‹ Previous</button>
+      <button id="nextPart" class="primary-btn">Next part ›</button>
+    </div>
+  </aside>
+  <section class="content">
+    <div class="audio-card">
+      <div class="audio-title">Listening recording — Part <span id="audioPart">1</span></div>
+      <div class="audio-subtitle">Use the recording for the current part. In the real test, the recording is played once.</div>
+      <audio id="audioPlayer" controls preload="metadata"><source id="audioSource" src="audio/part1.mp3" type="audio/mpeg"></audio>
+      <div class="audio-file-row"><label for="audioFile" class="file-btn">Choose audio file</label><input id="audioFile" type="file" accept="audio/*"><span id="audioStatus">Put part1.mp3–part4.mp3 in the audio folder.</span></div>
+    </div>
+
+    <div id="part-1" class="part-content">
+      <div class="question-block"><h1>Part 1</h1><p><strong>Questions 1–10</strong></p>
+        <p>Complete the information below. Write <strong>NO MORE THAN ONE WORD OR A NUMBER</strong> for each answer.</p>
+        <table class="form-table">
+          <tr><th colspan="2">Apartment for rent</th></tr>
+          <tr><th>Street</th><td><u>Bridge</u> street</td></tr>
+          <tr><th>Street Nº</th><td><input data-q="1" class="blank-input"></td></tr>
+          <tr><th>Included utilities</th><td>Gas, heat, water, <input data-q="2" class="inline-input">, phone</td></tr>
+          <tr><th>Not included utilities</th><td><input data-q="3" class="blank-input"></td></tr>
+          <tr><th>Public transport</th><td>Underground, <input data-q="4" class="inline-input"></td></tr>
+          <tr><th>Tenant’s name</th><td>John <input data-q="5" class="inline-input"></td></tr>
+        </table>
+      </div>
+      <div class="question-block">
+        <h2>Questions 6–8</h2><p><strong>Choose THREE answers, A–F.</strong></p>
+        <p>Which THREE things should the caller bring to the meeting?</p>
+        <div class="options multi-options" data-multi-group="6">
+          <label><input type="checkbox" value="A" data-multi="6"> A. Driving license</label>
+          <label><input type="checkbox" value="B" data-multi="6"> B. Passport</label>
+          <label><input type="checkbox" value="C" data-multi="6"> C. Tax bill</label>
+          <label><input type="checkbox" value="D" data-multi="6"> D. Employment contract</label>
+          <label><input type="checkbox" value="E" data-multi="6"> E. Reference from a friend or colleague</label>
+          <label><input type="checkbox" value="F" data-multi="6"> F. Reference from an employer</label>
+        </div>
+        <div class="limit-note">Your three selected letters are used for Questions 6, 7 and 8.</div>
+      </div>
+      <div class="question-block">
+        <h2>Questions 9–10</h2>
+        <div class="mc-question" data-q="9"><div><strong>9.</strong> What time do the caller and apartment manager decide to meet?</div>
+          <label><input type="radio" name="q9" value="A"> A. 5:30 PM</label><label><input type="radio" name="q9" value="B"> B. 6:00 PM</label><label><input type="radio" name="q9" value="C"> C. 6:30 PM</label>
+        </div>
+        <div class="mc-question" data-q="10"><div><strong>10.</strong> Where do they decide to meet?</div>
+          <label><input type="radio" name="q10" value="A"> A. Near the manager’s apartment</label><label><input type="radio" name="q10" value="B"> B. At the caller’s future apartment</label><label><input type="radio" name="q10" value="C"> C. At the office</label>
+        </div>
+      </div>
+    </div>
+
+    <div id="part-2" class="part-content hidden-part">
+      <div class="question-block"><h1>Part 2</h1><p><strong>Questions 11–20</strong></p>
+        <h2>Questions 11–16</h2><p>Complete the table below. Write <strong>NO MORE THAN TWO WORDS AND/OR A NUMBER</strong> for each answer.</p>
+        <table class="form-table">
+          <tr><th>Ticket type</th><th>Ticket cost</th></tr>
+          <tr><th>Adult’s ticket</th><td><input data-q="11" class="blank-input"> pounds</td></tr>
+          <tr><th>Child’s ticket <small>(for children between 5 and 15 years)</small></th><td><input data-q="12" class="blank-input"> pounds</td></tr>
+          <tr><th>*Children under <input data-q="13" class="inline-input small-input"> years</th><td>free</td></tr>
+          <tr><th>Reduced tariff <small>(for full-time students and disabled visitors)</small></th><td><input data-q="14" class="blank-input"> pounds</td></tr>
+          <tr><th><input data-q="15" class="blank-input" aria-label="Question 15"></th><td>55 pounds<br><small>(can be used by up to 2 adults and 3 children)</small></td></tr>
+          <tr><th>Annual membership</th><td><input data-q="16" class="blank-input"> pounds</td></tr>
+        </table>
+      </div>
+      <div class="question-block"><h2>Questions 17–20</h2><p>Complete the information about ordering tickets. Write <strong>NO MORE THAN TWO WORDS</strong> for each answer.</p>
+        <div class="sentence-list">
+          <p><strong>17.</strong> The easiest way is to buy your tickets <input data-q="17" class="inline-input">.</p>
+          <p><strong>18.</strong> Make sure that you receive a <input data-q="18" class="inline-input long-input"> of your booking!</p>
+          <p><strong>19.</strong> The second way is to book your tickets <input data-q="19" class="inline-input">.</p>
+          <p><strong>20.</strong> You can simply purchase the tickets <input data-q="20" class="inline-input"> in ticket kiosks.</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="part-3" class="part-content hidden-part">
+      <div class="question-block"><h1>Part 3</h1><p><strong>Questions 21–30</strong></p>
+        <h2>Questions 21–23</h2><p>Complete the information below. Write <strong>NO MORE THAN THREE WORDS</strong> for each answer.</p>
+        <div class="sentence-list">
+          <p><strong>21.</strong> The total course duration is <input data-q="21" class="inline-input long-input">.</p>
+          <p><strong>22.</strong> During the final project students will work in teams of <input data-q="22" class="inline-input long-input">.</p>
+          <p><strong>23.</strong> The professor told that the key thing in marketing strategy is to <input data-q="23" class="inline-input long-input">.</p>
+        </div>
+      </div>
+      <div class="question-block"><h2>Questions 24–28</h2><p><strong>Choose FIVE answers, A–I.</strong></p><p>Which FIVE modules does the course include?</p>
+        <div class="options multi-options" data-multi-group="24">
+          <label><input type="checkbox" value="A" data-multi="24"> A. Marketing</label><label><input type="checkbox" value="B" data-multi="24"> B. Design of custom logos</label><label><input type="checkbox" value="C" data-multi="24"> C. Product management</label><label><input type="checkbox" value="D" data-multi="24"> D. Branding</label><label><input type="checkbox" value="E" data-multi="24"> E. E-commerce</label><label><input type="checkbox" value="F" data-multi="24"> F. Advertising</label><label><input type="checkbox" value="G" data-multi="24"> G. Analytics</label><label><input type="checkbox" value="H" data-multi="24"> H. Customer attraction</label><label><input type="checkbox" value="I" data-multi="24"> I. Business strategies</label>
+        </div><div class="limit-note">Your five selected letters are used for Questions 24–28.</div>
+      </div>
+      <div class="question-block"><h2>Questions 29–30</h2><p>Complete the information below. Write <strong>NO MORE THAN TWO WORDS</strong> for each answer.</p>
+        <div class="sentence-list"><p><strong>29.</strong> The next lecture is in the big classroom on the <input data-q="29" class="inline-input long-input">.</p><p><strong>30.</strong> Students need to take their last week <input data-q="30" class="inline-input long-input">.</p></div>
+      </div>
+    </div>
+
+    <div id="part-4" class="part-content hidden-part">
+      <div class="question-block"><h1>Part 4</h1><p><strong>Questions 31–40</strong></p><h2>Questions 31–35</h2><p>Choose the correct letter, A, B or C.</p>
+        <div class="mc-question" data-q="31"><div><strong>31.</strong> Initially, the Great Wall was built to</div><label><input type="radio" name="q31" value="A"> A. prevent invaders entering China</label><label><input type="radio" name="q31" value="B"> B. function as psychological barrier</label><label><input type="radio" name="q31" value="C"> C. show country’s enduring strength</label></div>
+        <div class="mc-question" data-q="32"><div><strong>32.</strong> Construction started</div><label><input type="radio" name="q32" value="A"> A. in third century B.C.</label><label><input type="radio" name="q32" value="B"> B. in 220 B.C.</label><label><input type="radio" name="q32" value="C"> C. in 390 A.D.</label></div>
+        <div class="mc-question" data-q="33"><div><strong>33.</strong> The Chinese name of the monument is</div><label><input type="radio" name="q33" value="A"> A. the Great Wall</label><label><input type="radio" name="q33" value="B"> B. the Big Wall</label><label><input type="radio" name="q33" value="C"> C. the Long Wall</label></div>
+        <div class="mc-question" data-q="34"><div><strong>34.</strong> The wall as it exists today was constructed mainly by</div><label><input type="radio" name="q34" value="A"> A. Qin dynasty</label><label><input type="radio" name="q34" value="B"> B. Northern Wei dynasty</label><label><input type="radio" name="q34" value="C"> C. Ming dynasty</label></div>
+        <div class="mc-question" data-q="35"><div><strong>35.</strong> During the Ming dynasty, the wall’s main purpose was</div><label><input type="radio" name="q35" value="A"> A. to be a military fortification</label><label><input type="radio" name="q35" value="B"> B. to protect caravans along trade routes</label><label><input type="radio" name="q35" value="C"> C. to contribute to the defense of the country</label></div>
+      </div>
+      <div class="question-block"><h2>Questions 36–40</h2><p>Complete the sentences. Write <strong>NO MORE THAN THREE WORDS</strong> for each answer.</p>
+        <div class="sentence-list">
+          <p><strong>36.</strong> Before the use of bricks, the Great Wall was mainly built from stones, wood and <input data-q="36" class="inline-input long-input">.</p>
+          <p><strong>37.</strong> Many western sections of the wall are constructed from mud and thus are more <input data-q="37" class="inline-input long-input">.</p>
+          <p><strong>38.</strong> A part of the wall in Gansu province may disappear due to <input data-q="38" class="inline-input long-input">.</p>
+          <p><strong>39.</strong> To see the wall from the Moon would require superhuman <input data-q="39" class="inline-input long-input">.</p>
+          <p><strong>40.</strong> The Great Wall is generally recognized as one of the most impressive <input data-q="40" class="inline-input long-input"> in history.</p>
+        </div>
+      </div>
+    </div>
+    <div id="resultArea"></div>
+  </section>
+</main>
+<footer class="bottom-bar"><div><span id="answeredCount">0</span> / 10 answered</div><button id="submitBtn" class="submit-btn">Finish test</button></footer>
+<script src="script.js"></script>
+</body>
+</html>
