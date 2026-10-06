@@ -1,51 +1,49 @@
-/* =========================================================
-   IELTS READING PRACTICE
-   COMPLETE LOCAL-STORAGE app.js
-   ---------------------------------------------------------
-   NO LOGIN
-   NO API
-   NO GOOGLE SHEETS
-   NO TEACHER / ADMIN
-   NO ONLINE ANSWER STORAGE
-
+/* ============================================================
+   IELTS READING PRACTICE APP
+   LOCAL STORAGE ONLY
+   ============================================================
    Supports:
-   - true_false_not_given
-   - yes_no_not_given
-   - fill_blank
-   - summary_completion
-   - multiple_choice
-   - multiple_choice_multiple
-   - matching_headings
-   - matching_information
-   - matching_features
-   - answer_box
-   - drag & drop
-   - mobile click-to-place
-   - localStorage
+   - 8 IELTS Reading tests
    - 60 minute timer
-   - question navigator
-   - IELTS Reading band
-   - result review
-   - print / Save as PDF
-========================================================= */
+   - True / False / Not Given
+   - Yes / No / Not Given
+   - Fill in the blanks
+   - Summary Completion
+   - Multiple Choice
+   - Multiple Choice Multiple Answers
+   - Matching Headings
+   - Matching Information
+   - Matching Features
+   - Answer Box
+   - Drag & Drop
+   - Mobile click-to-place
+   - LocalStorage
+   - Question navigator
+   - IELTS band score
+   - Result review
+   - Print / Save PDF
+   - No login
+   - No API
+   - No Google Sheets
+   - No Admin / Teacher
+============================================================ */
 
 "use strict";
 
-/* =========================================================
+/* ============================================================
    CONFIG
-========================================================= */
+============================================================ */
 
 const CONFIG = {
     TEST_COUNT: 8,
     TEST_FOLDER: "./tests/",
     VOCABULARY_FILE: "./vocabulary.json",
-    DEFAULT_DURATION: 60,
-    STORAGE_PREFIX: "ieltsReading_"
+    DEFAULT_DURATION: 60
 };
 
-/* =========================================================
+/* ============================================================
    GLOBAL STATE
-========================================================= */
+============================================================ */
 
 let currentTest = null;
 let currentTestNumber = null;
@@ -58,8 +56,8 @@ let vocabulary = {};
 
 let timerInterval = null;
 let remainingSeconds = 0;
-let testElapsedSeconds = 0;
 let testStartTime = null;
+let testElapsedSeconds = 0;
 
 let testStarted = false;
 let testSubmitted = false;
@@ -68,312 +66,249 @@ let scoreData = null;
 
 let selectedDragOption = null;
 
-/* =========================================================
-   DOM READY
-========================================================= */
+/* ============================================================
+   STARTUP
+============================================================ */
 
-document.addEventListener("DOMContentLoaded", async () => {
-    injectStyles();
-    setupEvents();
-    await loadVocabulary();
-    renderTestCards();
+window.addEventListener("DOMContentLoaded", async function () {
+    try {
+        injectDragDropStyles();
+        injectResultStyles();
+        setupGlobalEvents();
+        await loadVocabulary();
+        removeTeacherAdminElements();
+        showDashboard();
+    } catch (error) {
+        console.error("IELTS Reading startup error:", error);
+
+        document.body.insertAdjacentHTML(
+            "beforeend",
+            `
+            <div style="
+                position:fixed;
+                inset:0;
+                z-index:999999;
+                background:#fff;
+                color:#b00020;
+                padding:30px;
+                font-family:Arial,sans-serif;
+                overflow:auto;
+            ">
+                <h2>IELTS Reading App Error</h2>
+                <pre style="white-space:pre-wrap;">${escapeHTML(
+                    error.stack || error.message || String(error)
+                )}</pre>
+            </div>
+            `
+        );
+    }
 });
 
-/* =========================================================
-   BASIC HELPERS
-========================================================= */
+/* ============================================================
+   GLOBAL EVENTS
+============================================================ */
 
-function $(id) {
-    return document.getElementById(id);
-}
-
-function setText(id, value) {
-    const el = $(id);
-    if (el) el.textContent = value ?? "";
-}
-
-function addClick(id, fn) {
-    const el = $(id);
-    if (el) el.addEventListener("click", fn);
-}
-
-function escapeHTML(value) {
-    return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-}
-
-function escapeAttr(value) {
-    return escapeHTML(value);
-}
-
-function normalizeAnswer(value) {
-    if (value === undefined || value === null) return "";
-
-    if (typeof value === "object") {
-        if (value.letter !== undefined) {
-            return String(value.letter).trim().toLowerCase();
-        }
-
-        if (value.text !== undefined) {
-            return String(value.text).trim().toLowerCase();
-        }
-
-        if (value.value !== undefined) {
-            return String(value.value).trim().toLowerCase();
-        }
-
-        return JSON.stringify(value)
-            .trim()
-            .toLowerCase();
-    }
-
-    return String(value)
-        .trim()
-        .replace(/\s+/g, " ")
-        .toLowerCase();
-}
-
-function formatTime(seconds) {
-    seconds = Math.max(0, Number(seconds) || 0);
-
-    const min = Math.floor(seconds / 60);
-    const sec = seconds % 60;
-
-    return String(min).padStart(2, "0") +
-        ":" +
-        String(sec).padStart(2, "0");
-}
-
-function showToast(message) {
-    let toast = $("appToast");
-
-    if (!toast) {
-        toast = document.createElement("div");
-        toast.id = "appToast";
-
-        Object.assign(toast.style, {
-            position: "fixed",
-            left: "50%",
-            bottom: "30px",
-            transform: "translateX(-50%)",
-            zIndex: "99999",
-            padding: "12px 20px",
-            borderRadius: "10px",
-            background: "#222",
-            color: "#fff",
-            fontSize: "14px",
-            boxShadow: "0 8px 30px rgba(0,0,0,.25)"
-        });
-
-        document.body.appendChild(toast);
-    }
-
-    toast.textContent = message;
-    toast.style.display = "block";
-
-    clearTimeout(toast._timer);
-
-    toast._timer = setTimeout(() => {
-        toast.style.display = "none";
-    }, 2500);
-}
-
-function showScreen(id) {
-    document.querySelectorAll(".screen").forEach(screen => {
-        screen.style.display = "none";
-        screen.classList.remove("active");
-    });
-
-    const target = $(id);
-
-    if (target) {
-        target.style.display = "";
-        target.classList.add("active");
-    }
-}
-
-/* =========================================================
-   EVENTS
-========================================================= */
-
-function setupEvents() {
-
+function setupGlobalEvents() {
     addClick("startTestButton", startTest);
-    addClick("startExamButton", startTest);
+    addClick("backToDashboardButton", showDashboard);
+    addClick("testBackButton", confirmExitTest);
+
+    addClick("submitTestButton", confirmSubmitTest);
 
     addClick("previousPartButton", previousPart);
     addClick("nextPartButton", nextPart);
 
-    addClick("submitTestButton", confirmSubmitTest);
-    addClick("confirmSubmitButton", submitTest);
+    addClick("returnDashboardButton", showDashboard);
+
+    addClick("retakeTestButton", function () {
+        if (currentTest) {
+            startTest();
+        }
+    });
+
+    addClick("closeVocabularyPopup", closeVocabularyPopup);
+
+    addClick("closeConfirmModal", closeConfirmModal);
     addClick("cancelSubmitButton", closeConfirmModal);
+    addClick("confirmSubmitButton", submitTest);
 
-    addClick("backToDashboardButton", backToDashboard);
-    addClick("returnDashboardButton", backToDashboard);
-    addClick("backDashboard", backToDashboard);
-
-    addClick("retakeTestButton", restartCurrentTest);
-    addClick("startAgainButton", restartCurrentTest);
-
-    addClick("printResultButton", printScorePDF);
-    addClick("printScoreButton", printScorePDF);
-
-    document.addEventListener("click", event => {
-
-        const testCard = event.target.closest("[data-test-number]");
+    document.addEventListener("click", function (event) {
+        const popup = document.getElementById("vocabularyPopup");
 
         if (
-            testCard &&
-            !event.target.closest("button, a, input, select")
+            popup &&
+            popup.style.display !== "none" &&
+            !popup.contains(event.target) &&
+            !event.target.closest(".vocabulary-word")
         ) {
-            const number = Number(
-                testCard.dataset.testNumber
-            );
-
-            if (number) {
-                openTest(number);
-            }
-        }
-
-        const navButton =
-            event.target.closest("[data-question-nav]");
-
-        if (navButton) {
-            const number = Number(
-                navButton.dataset.questionNav
-            );
-
-            jumpToQuestion(number);
-        }
-
-        const dragOption =
-            event.target.closest(".drag-option, .summary-drag-word");
-
-        if (dragOption) {
-            selectDragOption(dragOption);
-        }
-
-        const removeButton =
-            event.target.closest(".remove-dropped-answer");
-
-        if (removeButton) {
-            removeDroppedAnswer(removeButton);
-        }
-    });
-
-    document.addEventListener("input", event => {
-        const input = event.target;
-
-        if (
-            input.matches(
-                "input[data-question-number], textarea[data-question-number]"
-            )
-        ) {
-            saveInputAnswer(input);
-        }
-    });
-
-    document.addEventListener("change", event => {
-        const input = event.target;
-
-        if (
-            input.matches(
-                "select[data-question-number], input[data-question-number]"
-            )
-        ) {
-            saveInputAnswer(input);
+            closeVocabularyPopup();
         }
     });
 }
 
-/* =========================================================
-   TEST LIST
-========================================================= */
+function addClick(id, handler) {
+    const element = document.getElementById(id);
+
+    if (element) {
+        element.addEventListener("click", handler);
+    }
+}
+
+/* ============================================================
+   REMOVE LOGIN / ADMIN / TEACHER ELEMENTS
+============================================================ */
+
+function removeTeacherAdminElements() {
+    const ids = [
+        "teacherAdminButton",
+        "adminButton",
+        "teacherButton",
+        "teacherAdminLink",
+        "adminLink",
+        "teacherLink",
+        "teacherAdmin",
+        "adminPanelButton",
+        "teacherAdminPanel",
+        "adminPanel"
+    ];
+
+    ids.forEach(function (id) {
+        const element = document.getElementById(id);
+
+        if (element) {
+            element.remove();
+        }
+    });
+
+    document
+        .querySelectorAll("button, a")
+        .forEach(function (element) {
+            const text = String(element.textContent || "")
+                .trim()
+                .toLowerCase();
+
+            if (
+                text === "admin" ||
+                text === "teacher" ||
+                text === "teacher admin" ||
+                text === "teacher/admin"
+            ) {
+                element.remove();
+            }
+        });
+
+    const loginScreen = document.getElementById("loginScreen");
+
+    if (loginScreen) {
+        loginScreen.style.display = "none";
+    }
+
+    const loginForm = document.getElementById("loginForm");
+
+    if (loginForm) {
+        loginForm.remove();
+    }
+}
+
+/* ============================================================
+   SCREEN CONTROL
+   IMPORTANT:
+   Existing HTML uses display:none.
+============================================================ */
+
+function showScreen(id) {
+    document.querySelectorAll(".screen").forEach(function (screen) {
+        screen.style.display = "none";
+        screen.classList.remove("active");
+    });
+
+    const target = document.getElementById(id);
+
+    if (!target) {
+        console.error("Screen not found:", id);
+        return;
+    }
+
+    target.style.display = "block";
+    target.classList.add("active");
+
+    window.scrollTo({
+        top: 0,
+        behavior: "instant"
+    });
+}
+
+/* ============================================================
+   DASHBOARD
+============================================================ */
+
+async function showDashboard() {
+    stopTimer();
+
+    testStarted = false;
+    testSubmitted = false;
+
+    showScreen("dashboardScreen");
+
+    await renderTestCards();
+}
 
 async function renderTestCards() {
+    const container = document.getElementById("testCards");
 
-    const box =
-        $("testCards") ||
-        $("testsContainer") ||
-        $("testList");
-
-    if (!box) return;
-
-    box.innerHTML = "";
-
-    let found = 0;
-
-    for (let i = 1; i <= CONFIG.TEST_COUNT; i++) {
-
-        try {
-
-            const response = await fetch(
-                `${CONFIG.TEST_FOLDER}Test${i}.json?${Date.now()}`,
-                { cache: "no-store" }
-            );
-
-            if (!response.ok) continue;
-
-            found++;
-
-            const card = document.createElement("div");
-
-            card.className = "test-card";
-            card.dataset.testNumber = i;
-
-            card.innerHTML = `
-                <div class="test-card-number">TEST ${i}</div>
-                <h3>IELTS Reading Test ${i}</h3>
-                <div class="test-card-info">
-                    <span>60 minutes</span>
-                    <span>40 questions</span>
-                </div>
-                <button type="button" class="test-card-button">
-                    Start Test
-                </button>
-            `;
-
-            card.querySelector("button").addEventListener(
-                "click",
-                () => openTest(i)
-            );
-
-            box.appendChild(card);
-
-        } catch (error) {
-            console.warn(`Test ${i} unavailable`, error);
-        }
+    if (!container) {
+        return;
     }
 
-    if (!found) {
-        box.innerHTML = `
-            <div class="empty-tests">
-                No IELTS Reading tests were found.
+    container.innerHTML = "";
+
+    for (let i = 1; i <= CONFIG.TEST_COUNT; i++) {
+        const card = document.createElement("div");
+
+        card.className = "test-card";
+        card.dataset.testNumber = i;
+
+        card.innerHTML = `
+            <div class="test-card-number">TEST ${i}</div>
+
+            <h3>IELTS Reading Test ${i}</h3>
+
+            <div class="test-card-info">
+                <span>${CONFIG.DEFAULT_DURATION} minutes</span>
+                <span>40 questions</span>
             </div>
+
+            <button type="button" class="test-card-button">
+                Start Test
+            </button>
         `;
+
+        card.addEventListener("click", function () {
+            openTest(i);
+        });
+
+        container.appendChild(card);
     }
 }
 
-/* =========================================================
+/* ============================================================
    LOAD TEST
-========================================================= */
+============================================================ */
 
 async function openTest(testNumber) {
+    setLoading(true, "Loading test...");
 
     try {
+        const url =
+            `${CONFIG.TEST_FOLDER}Test${testNumber}.json?${Date.now()}`;
 
-        const response = await fetch(
-            `${CONFIG.TEST_FOLDER}Test${testNumber}.json?${Date.now()}`,
-            { cache: "no-store" }
-        );
+        const response = await fetch(url, {
+            cache: "no-store"
+        });
 
         if (!response.ok) {
             throw new Error(
-                `Test${testNumber}.json could not be loaded.`
+                `Test${testNumber}.json could not be loaded. HTTP ${response.status}`
             );
         }
 
@@ -383,58 +318,50 @@ async function openTest(testNumber) {
 
         currentTest = data;
         currentTestNumber = testNumber;
-
         currentPartIndex = 0;
 
-        studentAnswers = loadSavedAnswers();
-
+        studentAnswers = {};
         submittedAnswers = {};
 
-        testStarted = false;
         testSubmitted = false;
 
+        loadSavedAnswers();
+
         showTestIntroduction();
-
     } catch (error) {
-
         console.error(error);
 
         showToast(
-            error.message ||
-            "Could not load the test."
+            error.message || "Could not load the test."
         );
+    } finally {
+        setLoading(false);
     }
 }
 
-/* =========================================================
-   VALIDATE TEST
-========================================================= */
-
 function validateTest(test) {
-
     if (
         !test ||
         !Array.isArray(test.parts) ||
         !test.parts.length
     ) {
-        throw new Error("Invalid test JSON.");
+        throw new Error(
+            "Invalid test JSON: parts are missing."
+        );
     }
 
-    test.parts.forEach(part => {
-
+    test.parts.forEach(function (part, index) {
         if (!part.passage) {
-            part.passage = {
-                title: "",
-                paragraphs: []
-            };
+            throw new Error(
+                `Part ${index + 1} is missing its passage.`
+            );
         }
 
         if (!Array.isArray(part.questionGroups)) {
             part.questionGroups = [];
         }
 
-        part.questionGroups.forEach(group => {
-
+        part.questionGroups.forEach(function (group) {
             if (!Array.isArray(group.questions)) {
                 group.questions = [];
             }
@@ -442,29 +369,27 @@ function validateTest(test) {
             if (!Array.isArray(group.blanks)) {
                 group.blanks = [];
             }
-
         });
     });
 }
 
-/* =========================================================
+/* ============================================================
    INTRO
-========================================================= */
+============================================================ */
 
 function showTestIntroduction() {
-
     showScreen("introScreen");
 
     setText(
         "introTestNumber",
         currentTest.testId ||
-        `Test ${currentTestNumber}`
+            `Test ${currentTestNumber}`
     );
 
     setText(
         "introTitle",
         currentTest.title ||
-        `IELTS Reading Test ${currentTestNumber}`
+            `IELTS Reading Test ${currentTestNumber}`
     );
 
     setText(
@@ -483,28 +408,30 @@ function showTestIntroduction() {
     );
 }
 
-/* =========================================================
-   START
-========================================================= */
+/* ============================================================
+   START TEST
+============================================================ */
 
 function startTest() {
+    if (!currentTest) {
+        return;
+    }
 
-    if (!currentTest) return;
+    loadSavedAnswers();
+
+    currentPartIndex = 0;
 
     testStarted = true;
     testSubmitted = false;
 
-    currentPartIndex = 0;
-
     testStartTime = Date.now();
 
-    testElapsedSeconds = 0;
-
     remainingSeconds =
-        (
-            Number(currentTest.duration) ||
-            CONFIG.DEFAULT_DURATION
-        ) * 60;
+        (Number(currentTest.duration) ||
+            CONFIG.DEFAULT_DURATION) *
+        60;
+
+    testElapsedSeconds = 0;
 
     showScreen("testScreen");
 
@@ -513,41 +440,31 @@ function startTest() {
     startTimer();
 }
 
-/* =========================================================
+/* ============================================================
    TIMER
-========================================================= */
+============================================================ */
 
 function startTimer() {
-
     stopTimer();
 
     updateTimerDisplay();
 
-    timerInterval = setInterval(() => {
-
+    timerInterval = setInterval(function () {
         remainingSeconds--;
-
-        testElapsedSeconds =
-            Math.floor(
-                (Date.now() - testStartTime) / 1000
-            );
 
         updateTimerDisplay();
 
         if (remainingSeconds <= 0) {
-
             remainingSeconds = 0;
 
             stopTimer();
 
             autoSubmitTest();
         }
-
     }, 1000);
 }
 
 function stopTimer() {
-
     if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -555,7 +472,6 @@ function stopTimer() {
 }
 
 function updateTimerDisplay() {
-
     const ids = [
         "timer",
         "timerDisplay",
@@ -563,56 +479,53 @@ function updateTimerDisplay() {
     ];
 
     for (const id of ids) {
-
-        const element = $(id);
+        const element = document.getElementById(id);
 
         if (element) {
-
             element.textContent =
                 formatTime(remainingSeconds);
 
-            if (remainingSeconds <= 300) {
-                element.classList.add("timer-warning");
-            } else {
-                element.classList.remove("timer-warning");
-            }
-
-            break;
+            return;
         }
     }
 }
 
-/* =========================================================
-   PART RENDERING
-========================================================= */
+/* ============================================================
+   CURRENT PART
+============================================================ */
 
 function renderCurrentPart() {
-
-    if (!currentTest) return;
+    if (!currentTest) {
+        return;
+    }
 
     const part =
         currentTest.parts[currentPartIndex];
 
-    if (!part) return;
-
-    const partNumber =
-        part.partNumber ||
-        currentPartIndex + 1;
+    if (!part) {
+        return;
+    }
 
     setText(
         "testHeaderTitle",
         currentTest.title ||
-        `IELTS Reading Test ${currentTestNumber}`
+            `IELTS Reading Test ${currentTestNumber}`
     );
 
     setText(
         "testHeaderPart",
-        `Part ${partNumber}`
+        `Part ${
+            part.partNumber ||
+            currentPartIndex + 1
+        }`
     );
 
     setText(
         "passagePartLabel",
-        `Part ${partNumber}`
+        `Part ${
+            part.partNumber ||
+            currentPartIndex + 1
+        }`
     );
 
     setText(
@@ -627,7 +540,9 @@ function renderCurrentPart() {
 
     setText(
         "partIndicator",
-        `Part ${currentPartIndex + 1} of ${currentTest.parts.length}`
+        `Part ${
+            currentPartIndex + 1
+        } of ${currentTest.parts.length}`
     );
 
     renderPassage(part.passage);
@@ -638,25 +553,18 @@ function renderCurrentPart() {
 
     updatePartButtons();
 
-    restoreAnswersToDOM();
-
-    scrollPanelsTop();
+    scrollTestPanelsToTop();
 }
 
-/* =========================================================
-   QUESTION NUMBER COLLECTION
-   IMPORTANT:
-   includes questions AND blanks
-========================================================= */
+/* ============================================================
+   QUESTION RANGE
+============================================================ */
 
-function getPartQuestionNumbers(part) {
-
+function questionRangeForPart(part) {
     const numbers = [];
 
-    (part.questionGroups || []).forEach(group => {
-
-        (group.questions || []).forEach(question => {
-
+    (part.questionGroups || []).forEach(function (group) {
+        (group.questions || []).forEach(function (question) {
             const n = Number(question.number);
 
             if (Number.isFinite(n)) {
@@ -664,8 +572,7 @@ function getPartQuestionNumbers(part) {
             }
         });
 
-        (group.blanks || []).forEach(blank => {
-
+        (group.blanks || []).forEach(function (blank) {
             const n = Number(blank.number);
 
             if (Number.isFinite(n)) {
@@ -674,346 +581,352 @@ function getPartQuestionNumbers(part) {
         });
     });
 
-    return [...new Set(numbers)].sort((a, b) => a - b);
+    if (!numbers.length) {
+        return "";
+    }
+
+    return `${Math.min(...numbers)}-${Math.max(...numbers)}`;
 }
 
-function getAllQuestionNumbers() {
-
-    const numbers = [];
-
-    (currentTest?.parts || []).forEach(part => {
-        numbers.push(
-            ...getPartQuestionNumbers(part)
-        );
-    });
-
-    return [...new Set(numbers)].sort((a, b) => a - b);
-}
-
-function countTotalQuestions() {
-    return getAllQuestionNumbers().length;
-}
-
-function questionRangeForPart(part) {
-
-    const numbers =
-        getPartQuestionNumbers(part);
-
-    if (!numbers.length) return "";
-
-    return `${numbers[0]}-${numbers[numbers.length - 1]}`;
-}
-
-/* =========================================================
+/* ============================================================
    PASSAGE
-========================================================= */
+============================================================ */
 
 function renderPassage(passage) {
+    const box = document.getElementById(
+        "passageContent"
+    );
 
-    const box =
-        $("passageContent") ||
-        $("passage");
+    if (!box) {
+        return;
+    }
 
-    if (!box) return;
+    const paragraphs = passage.paragraphs || [];
 
-    box.innerHTML =
-        (passage.paragraphs || [])
-        .map(paragraph => {
-
-            const id =
-                escapeHTML(paragraph.id || "");
-
-            const text =
-                highlightVocabulary(
-                    paragraph.text || ""
-                );
-
+    box.innerHTML = paragraphs
+        .map(function (paragraph) {
             return `
                 <p class="passage-paragraph">
-                    ${
-                        id
-                            ? `<strong class="paragraph-label">${id}</strong>`
-                            : ""
-                    }
-                    ${text}
+                    <span class="paragraph-label">
+                        ${escapeHTML(paragraph.id || "")}
+                    </span>
+                    ${highlightVocabulary(
+                        paragraph.text || ""
+                    )}
                 </p>
             `;
-
         })
         .join("");
 
-    box.querySelectorAll(
-        ".vocabulary-word"
-    ).forEach(word => {
+    box
+        .querySelectorAll(".vocabulary-word")
+        .forEach(function (element) {
+            element.addEventListener(
+                "click",
+                function (event) {
+                    event.stopPropagation();
 
-        word.addEventListener("click", event => {
-
-            event.stopPropagation();
-
-            showVocabularyPopup(
-                word.dataset.word,
-                word
+                    showVocabularyPopup(
+                        element.dataset.word
+                    );
+                }
             );
         });
-    });
 }
 
-/* =========================================================
+/* ============================================================
    VOCABULARY
-========================================================= */
+============================================================ */
 
 async function loadVocabulary() {
-
     vocabulary = {};
 
     try {
-
         const response = await fetch(
             `${CONFIG.VOCABULARY_FILE}?${Date.now()}`,
-            { cache: "no-store" }
+            {
+                cache: "no-store"
+            }
         );
 
-        if (!response.ok) return;
+        if (!response.ok) {
+            return;
+        }
 
         const data = await response.json();
 
-        if (Array.isArray(data)) {
-
-            data.forEach(item => {
-
-                const word =
-                    item.word ||
-                    item.term ||
-                    item.chinese ||
-                    item.text;
-
-                if (word) {
-                    vocabulary[
-                        normalizeAnswer(word)
-                    ] = item;
-                }
-            });
-
-        } else if (
-            data &&
-            typeof data === "object"
-        ) {
-
-            vocabulary = data;
-        }
-
+        vocabulary =
+            data.words ||
+            data.vocabulary ||
+            data ||
+            {};
     } catch (error) {
-
         console.warn(
-            "Vocabulary file unavailable."
+            "Vocabulary could not be loaded.",
+            error
         );
+
+        vocabulary = {};
     }
 }
 
 function highlightVocabulary(text) {
+    if (
+        !vocabulary ||
+        typeof vocabulary !== "object" ||
+        !Object.keys(vocabulary).length
+    ) {
+        return escapeHTML(text);
+    }
 
-    let html = escapeHTML(text);
+    let result = escapeHTML(text);
 
-    const words =
-        Object.keys(vocabulary)
-            .filter(Boolean)
-            .sort((a, b) => b.length - a.length);
+    const words = Object.keys(vocabulary).sort(
+        function (a, b) {
+            return b.length - a.length;
+        }
+    );
 
-    if (!words.length) return html;
+    words.forEach(function (word) {
+        if (!word) {
+            return;
+        }
 
-    words.forEach(word => {
+        const escaped = escapeRegExp(word);
 
-        const safe =
-            word.replace(
-                /[.*+?^${}()|[\]\\]/g,
-                "\\$&"
-            );
+        const regex = new RegExp(
+            `(?<![A-Za-z])(${escaped})(?![A-Za-z])`,
+            "gi"
+        );
 
-        const regex =
-            new RegExp(
-                `(${safe})`,
-                "gi"
-            );
-
-        html =
-            html.replace(
-                regex,
-                `<span class="vocabulary-word" data-word="$1">$1</span>`
-            );
+        result = result.replace(
+            regex,
+            function (match) {
+                return `
+                    <span
+                        class="vocabulary-word"
+                        data-word="${escapeAttribute(match)}"
+                    >${match}</span>
+                `;
+            }
+        );
     });
 
-    return html;
+    return result;
 }
 
-function showVocabularyPopup(word, target) {
-
-    const key =
-        normalizeAnswer(word);
-
-    let item =
-        vocabulary[key];
-
-    if (!item) {
-
-        const found =
-            Object.keys(vocabulary)
-                .find(
-                    k =>
-                        normalizeAnswer(k) === key
-                );
-
-        if (found) {
-            item = vocabulary[found];
-        }
+function showVocabularyPopup(word) {
+    if (!vocabulary) {
+        return;
     }
 
-    if (!item) return;
+    const key = Object.keys(vocabulary).find(
+        function (item) {
+            return (
+                String(item).toLowerCase() ===
+                String(word).toLowerCase()
+            );
+        }
+    );
 
-    let popup = $("vocabularyPopup");
+    if (!key) {
+        return;
+    }
+
+    const item = vocabulary[key] || {};
+
+    const popup =
+        document.getElementById(
+            "vocabularyPopup"
+        );
 
     if (!popup) {
-
-        popup = document.createElement("div");
-
-        popup.id = "vocabularyPopup";
-
-        document.body.appendChild(popup);
+        return;
     }
 
-    const meaning =
-        item.meaning ||
-        item.definition ||
-        item.english ||
-        item.translation ||
-        "";
+    setText("vocabularyWord", word);
 
-    popup.innerHTML = `
-        <button class="vocab-close" type="button">×</button>
-        <strong>${escapeHTML(word)}</strong>
-        ${
-            item.pinyin
-                ? `<div>${escapeHTML(item.pinyin)}</div>`
-                : ""
-        }
-        ${
-            meaning
-                ? `<p>${escapeHTML(meaning)}</p>`
-                : ""
-        }
-    `;
+    setText(
+        "vocabularyMeaning",
+        item.meaning ||
+            item.translation ||
+            "Meaning not available."
+    );
+
+    setText(
+        "vocabularySimpleMeaning",
+        item.simpleMeaning ||
+            item.simple ||
+            ""
+    );
 
     popup.style.display = "block";
-
-    popup.querySelector(
-        ".vocab-close"
-    ).onclick = () => {
-        popup.style.display = "none";
-    };
 }
 
-/* =========================================================
+function closeVocabularyPopup() {
+    const popup =
+        document.getElementById(
+            "vocabularyPopup"
+        );
+
+    if (popup) {
+        popup.style.display = "none";
+    }
+}
+
+/* ============================================================
    QUESTION RENDERING
-========================================================= */
+============================================================ */
 
 function renderQuestions(part) {
-
     const box =
-        $("questionsContent") ||
-        $("questionContent");
+        document.getElementById(
+            "questionsContent"
+        );
 
-    if (!box) return;
+    if (!box) {
+        return;
+    }
 
     box.innerHTML = "";
 
     (part.questionGroups || []).forEach(
-        group => {
-
+        function (group) {
             const wrapper =
-                document.createElement("section");
+                document.createElement("div");
 
             wrapper.className =
                 "question-group";
 
-            const heading =
+            if (group.questionRange) {
+                wrapper.insertAdjacentHTML(
+                    "beforeend",
+                    `
+                    <h3 class="question-group-title">
+                        Questions ${escapeHTML(
+                            group.questionRange
+                        )}
+                    </h3>
+                    `
+                );
+            }
+
+            if (group.instructions) {
+                wrapper.insertAdjacentHTML(
+                    "beforeend",
+                    `
+                    <p class="question-instructions">
+                        ${escapeHTML(
+                            group.instructions
+                        )}
+                    </p>
+                    `
+                );
+            }
+
+            const content =
                 document.createElement("div");
 
-            heading.className =
-                "group-heading";
-
-            heading.innerHTML = `
-                <h3>
-                    ${escapeHTML(
-                        group.questionRange ||
-                        rangeForGroup(group)
-                    )}
-                </h3>
-
-                ${
-                    group.instructions
-                        ? `<p>${escapeHTML(group.instructions)}</p>`
-                        : ""
-                }
-            `;
-
-            wrapper.appendChild(heading);
+            wrapper.appendChild(content);
 
             const type =
-                normalizeType(group.type);
+                normalizeQuestionType(
+                    group.type
+                );
 
             switch (type) {
-
                 case "true_false_not_given":
-                    renderTFNG(wrapper, group);
+                    renderTrueFalseNotGiven(
+                        content,
+                        group
+                    );
                     break;
 
                 case "yes_no_not_given":
-                    renderYNNG(wrapper, group);
+                    renderYesNoNotGiven(
+                        content,
+                        group
+                    );
                     break;
 
                 case "fill_blank":
-                    renderFillBlank(wrapper, group);
+                    renderFillBlank(
+                        content,
+                        group
+                    );
                     break;
 
                 case "summary_completion":
-                    renderSummaryCompletion(wrapper, group);
+                    renderSummaryCompletion(
+                        content,
+                        group
+                    );
                     break;
 
                 case "multiple_choice":
-                    renderMultipleChoice(wrapper, group);
+                    renderMultipleChoice(
+                        content,
+                        group
+                    );
                     break;
 
                 case "multiple_choice_multiple":
-                    renderMultipleChoiceMultiple(wrapper, group);
+                case "multiple_choice_multiple_answers":
+                    renderMultipleChoiceMultiple(
+                        content,
+                        group
+                    );
                     break;
 
                 case "matching_headings":
-                    renderMatchingHeadings(wrapper, group);
+                    renderMatchingHeadings(
+                        content,
+                        group
+                    );
                     break;
 
                 case "matching_information":
-                    renderMatchingInformation(wrapper, group);
+                    renderMatchingInformation(
+                        content,
+                        group
+                    );
                     break;
 
                 case "matching_features":
-                    renderMatchingFeatures(wrapper, group);
+                    renderMatchingFeatures(
+                        content,
+                        group
+                    );
                     break;
 
                 case "answer_box":
-                    renderAnswerBox(wrapper, group);
+                case "short_answer":
+                    renderAnswerBox(
+                        content,
+                        group
+                    );
                     break;
 
                 default:
-                    renderGenericQuestions(wrapper, group);
+                    renderGenericGroup(
+                        content,
+                        group
+                    );
                     break;
             }
 
             box.appendChild(wrapper);
         }
     );
+
+    restoreAnswers();
+
+    restoreDragDropAnswers();
+
+    updateQuestionNavigator();
 }
 
-function normalizeType(type) {
-
+function normalizeQuestionType(type) {
     return String(type || "")
         .trim()
         .toLowerCase()
@@ -1021,791 +934,1005 @@ function normalizeType(type) {
         .replace(/\s+/g, "_");
 }
 
-function rangeForGroup(group) {
+/* ============================================================
+   TRUE / FALSE / NOT GIVEN
+============================================================ */
 
-    const numbers = [
-        ...(group.questions || []),
-        ...(group.blanks || [])
-    ]
-    .map(q => Number(q.number))
-    .filter(Number.isFinite)
-    .sort((a, b) => a - b);
-
-    if (!numbers.length) return "";
-
-    return `Questions ${numbers[0]}-${numbers[numbers.length - 1]}`;
+function renderTrueFalseNotGiven(box, group) {
+    (group.questions || []).forEach(
+        function (question) {
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    [
+                        "TRUE",
+                        "FALSE",
+                        "NOT GIVEN"
+                    ]
+                )
+            );
+        }
+    );
 }
 
-/* =========================================================
-   BASIC QUESTION CARD
-========================================================= */
+/* ============================================================
+   YES / NO / NOT GIVEN
+============================================================ */
 
-function createQuestionCard(question) {
-
-    const card =
-        document.createElement("div");
-
-    card.className =
-        "question-card";
-
-    card.dataset.questionNumber =
-        question.number;
-
-    const number =
-        question.number;
-
-    card.innerHTML = `
-        <div class="question-number">
-            ${escapeHTML(number)}
-        </div>
-
-        <div class="question-body">
-
-            <div class="question-text">
-                ${formatQuestionText(question.text || "")}
-            </div>
-
-            <div class="question-control"></div>
-
-        </div>
-    `;
-
-    return card;
+function renderYesNoNotGiven(box, group) {
+    (group.questions || []).forEach(
+        function (question) {
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    [
+                        "YES",
+                        "NO",
+                        "NOT GIVEN"
+                    ]
+                )
+            );
+        }
+    );
 }
 
-function formatQuestionText(text) {
-
-    let result =
-        escapeHTML(text);
-
-    result =
-        result.replace(
-            /_{2,}/g,
-            `<span class="inline-blank">______</span>`
-        );
-
-    return result;
-}
-
-/* =========================================================
-   TFNG
-========================================================= */
-
-function renderTFNG(box, group) {
-
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        control.appendChild(
-            createSelect(
-                question.number,
-                [
-                    "TRUE",
-                    "FALSE",
-                    "NOT GIVEN"
-                ]
-            )
-        );
-
-        box.appendChild(card);
-    });
-}
-
-/* =========================================================
-   YES / NO / NG
-========================================================= */
-
-function renderYNNG(box, group) {
-
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        control.appendChild(
-            createSelect(
-                question.number,
-                [
-                    "YES",
-                    "NO",
-                    "NOT GIVEN"
-                ]
-            )
-        );
-
-        box.appendChild(card);
-    });
-}
-
-/* =========================================================
+/* ============================================================
    FILL BLANK
-========================================================= */
+============================================================ */
 
 function renderFillBlank(box, group) {
+    const questions =
+        group.questions ||
+        group.blanks ||
+        [];
 
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
+    questions.forEach(function (question) {
+        const item =
+            createQuestionItem(question);
 
         const control =
-            card.querySelector(".question-control");
+            item.querySelector(
+                ".question-control"
+            );
 
-        const input =
-            document.createElement("input");
+        if (!control) {
+            return;
+        }
 
-        input.type = "text";
+        control.innerHTML = `
+            <input
+                type="text"
+                class="answer-input"
+                data-question-number="${question.number}"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Type your answer"
+            >
+        `;
 
-        input.className =
-            "answer-input";
+        attachInputListener(control);
 
-        input.dataset.questionNumber =
-            question.number;
-
-        input.placeholder =
-            "Type your answer";
-
-        input.autocomplete = "off";
-
-        control.appendChild(input);
-
-        box.appendChild(card);
+        box.appendChild(item);
     });
 }
 
-/* =========================================================
+/* ============================================================
    SUMMARY COMPLETION
-========================================================= */
+============================================================ */
 
 function renderSummaryCompletion(box, group) {
-
-    const blanks =
-        group.blanks?.length
-            ? group.blanks
-            : group.questions || [];
-
-    let options =
-        normalizeOptions(
-            group.options ||
-            group.words ||
-            group.wordBank ||
-            group.choices ||
-            []
-        );
-
-    if (!options.length) {
-
-        options =
-            blanks
-                .map(
-                    blank => blank.answer
-                )
-                .filter(Boolean)
-                .map(
-                    value => ({
-                        value: String(value),
-                        text: String(value)
-                    })
-                );
-    }
-
     const container =
         document.createElement("div");
 
     container.className =
         "summary-completion";
 
-    container.innerHTML = `
-        <div class="drag-bank-title">
-            Given words:
-        </div>
+    const blanks =
+        group.blanks &&
+        group.blanks.length
+            ? group.blanks
+            : group.questions || [];
 
-        <div class="drag-option-bank"></div>
-
-        <div class="summary-text"></div>
-    `;
-
-    const bank =
-        container.querySelector(
-            ".drag-option-bank"
+    const options =
+        getQuestionOptions(
+            null,
+            group
         );
 
-    options.forEach(option => {
-
-        const item =
-            createDragOption(
-                option,
-                "summary-drag-word"
-            );
-
-        bank.appendChild(item);
-    });
-
-    const summary =
-        container.querySelector(
-            ".summary-text"
-        );
-
-    blanks.forEach(blank => {
-
-        const row =
+    if (options.length) {
+        const bank =
             document.createElement("div");
 
-        row.className =
-            "summary-blank-row";
+        bank.className =
+            "word-bank";
 
-        row.innerHTML = `
-            <span class="summary-question-number">
-                ${escapeHTML(blank.number)}
-            </span>
-
-            <span class="summary-blank-text">
-                ${formatQuestionText(
-                    blank.text || ""
-                )}
-            </span>
-
-            <div
-                class="summary-drop-zone"
-                data-question-number="${escapeAttr(blank.number)}"
-            >
-                <span class="drop-placeholder">
-                    Drop / select answer
-                </span>
+        bank.innerHTML = `
+            <div class="word-bank-title">
+                Word Bank
             </div>
+            <div class="word-bank-options"></div>
         `;
 
-        summary.appendChild(row);
+        const optionBox =
+            bank.querySelector(
+                ".word-bank-options"
+            );
 
-        setupDropZone(
-            row.querySelector(".summary-drop-zone")
-        );
-    });
+        options.forEach(function (option, index) {
+            const value =
+                getOptionValue(option);
+
+            const label =
+                getOptionLabel(option);
+
+            const optionElement =
+                document.createElement("button");
+
+            optionElement.type = "button";
+
+            optionElement.className =
+                "drag-option";
+
+            optionElement.dataset.value =
+                value;
+
+            optionElement.dataset.index =
+                index;
+
+            optionElement.textContent =
+                label;
+
+            setupDragOption(
+                optionElement,
+                value
+            );
+
+            optionBox.appendChild(
+                optionElement
+            );
+        });
+
+        container.appendChild(bank);
+    }
+
+    const summary =
+        document.createElement("div");
+
+    summary.className =
+        "summary-text";
+
+    if (group.summary) {
+        summary.innerHTML =
+            renderSummaryHTML(
+                group.summary,
+                blanks
+            );
+    } else if (group.text) {
+        summary.innerHTML =
+            renderSummaryHTML(
+                group.text,
+                blanks
+            );
+    }
+
+    if (!summary.innerHTML) {
+        blanks.forEach(function (blank) {
+            summary.appendChild(
+                createSummaryDropZone(
+                    blank
+                )
+            );
+        });
+    } else {
+        summary
+            .querySelectorAll(
+                "[data-question-number]"
+            )
+            .forEach(function (zone) {
+                setupDropZone(
+                    zone,
+                    zone.dataset.questionNumber
+                );
+            });
+    }
+
+    container.appendChild(summary);
 
     box.appendChild(container);
 }
 
-/* =========================================================
+function renderSummaryHTML(text, blanks) {
+    let html = escapeHTML(
+        String(text || "")
+    );
+
+    blanks.forEach(function (blank) {
+        const number =
+            Number(blank.number);
+
+        if (!Number.isFinite(number)) {
+            return;
+        }
+
+        const token =
+            blank.placeholder ||
+            `{{${number}}}`;
+
+        const escapedToken =
+            escapeRegExp(token);
+
+        html = html.replace(
+            new RegExp(
+                escapedToken,
+                "g"
+            ),
+            `
+            <span
+                class="drop-zone"
+                data-question-number="${number}"
+                tabindex="0"
+            >
+                ${number}.
+                <span class="drop-zone-value">
+                    Drop answer here
+                </span>
+            </span>
+            `
+        );
+    });
+
+    return html;
+}
+
+function createSummaryDropZone(blank) {
+    const zone =
+        document.createElement("span");
+
+    zone.className =
+        "drop-zone";
+
+    zone.dataset.questionNumber =
+        blank.number;
+
+    zone.tabIndex = 0;
+
+    zone.innerHTML = `
+        ${blank.number}.
+        <span class="drop-zone-value">
+            Drop answer here
+        </span>
+    `;
+
+    setupDropZone(
+        zone,
+        blank.number
+    );
+
+    return zone;
+}
+
+/* ============================================================
    MULTIPLE CHOICE
-========================================================= */
+============================================================ */
 
 function renderMultipleChoice(box, group) {
+    (group.questions || []).forEach(
+        function (question) {
+            const options =
+                getQuestionOptions(
+                    question,
+                    group
+                );
 
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        const options =
-            getOptions(question, group);
-
-        const select =
-            createSelect(
-                question.number,
-                options,
-                true
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    options,
+                    false,
+                    true
+                )
             );
-
-        control.appendChild(select);
-
-        box.appendChild(card);
-    });
+        }
+    );
 }
 
-/* =========================================================
+/* ============================================================
    MULTIPLE CHOICE MULTIPLE
-========================================================= */
+============================================================ */
 
-function renderMultipleChoiceMultiple(box, group) {
+function renderMultipleChoiceMultiple(
+    box,
+    group
+) {
+    (group.questions || []).forEach(
+        function (question) {
+            const item =
+                createQuestionItem(
+                    question
+                );
 
-    (group.questions || []).forEach(question => {
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
 
-        const card =
-            createQuestionCard(question);
+            if (!control) {
+                return;
+            }
 
-        const control =
-            card.querySelector(".question-control");
+            const options =
+                getQuestionOptions(
+                    question,
+                    group
+                );
 
-        const options =
-            getOptions(question, group);
+            control.innerHTML =
+                options
+                    .map(function (option, index) {
+                        const value =
+                            getOptionValue(
+                                option
+                            );
 
-        options.forEach(option => {
+                        const label =
+                            getOptionLabel(
+                                option
+                            );
 
-            const normalized =
-                normalizeOption(option);
+                        return `
+                            <label class="choice-option">
+                                <input
+                                    type="checkbox"
+                                    data-question-number="${question.number}"
+                                    value="${escapeAttribute(
+                                        value
+                                    )}"
+                                >
+                                <span>
+                                    ${escapeHTML(
+                                        label
+                                    )}
+                                </span>
+                            </label>
+                        `;
+                    })
+                    .join("");
 
-            const label =
-                document.createElement("label");
+            control
+                .querySelectorAll(
+                    "input"
+                )
+                .forEach(function (input) {
+                    input.addEventListener(
+                        "change",
+                        function () {
+                            const number =
+                                Number(
+                                    input.dataset
+                                        .questionNumber
+                                );
 
-            label.className =
-                "multiple-option";
+                            const values =
+                                Array.from(
+                                    control.querySelectorAll(
+                                        "input:checked"
+                                    )
+                                ).map(
+                                    function (
+                                        checkbox
+                                    ) {
+                                        return checkbox.value;
+                                    }
+                                );
 
-            label.innerHTML = `
-                <input
-                    type="checkbox"
-                    data-question-number="${escapeAttr(question.number)}"
-                    value="${escapeAttr(normalized.value)}"
-                >
-                <span>
-                    ${escapeHTML(normalized.text)}
-                </span>
-            `;
+                            setAnswer(
+                                number,
+                                values
+                            );
+                        }
+                    );
+                });
 
-            control.appendChild(label);
-        });
-
-        box.appendChild(card);
-    });
+            box.appendChild(item);
+        }
+    );
 }
 
-/* =========================================================
+/* ============================================================
    MATCHING HEADINGS
-========================================================= */
+============================================================ */
 
-function renderMatchingHeadings(box, group) {
+function renderMatchingHeadings(
+    box,
+    group
+) {
+    (group.questions || []).forEach(
+        function (question) {
+            const options =
+                getQuestionOptions(
+                    question,
+                    group
+                );
 
-    const headings =
-        normalizeOptions(
-            group.headings ||
-            group.options ||
-            group.choices ||
-            []
-        );
-
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        control.appendChild(
-            createSelect(
-                question.number,
-                headings,
-                true
-            )
-        );
-
-        box.appendChild(card);
-    });
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    options,
+                    true
+                )
+            );
+        }
+    );
 }
 
-/* =========================================================
+/* ============================================================
    MATCHING INFORMATION
-========================================================= */
+============================================================ */
 
-function renderMatchingInformation(box, group) {
+function renderMatchingInformation(
+    box,
+    group
+) {
+    (group.questions || []).forEach(
+        function (question) {
+            const options =
+                getQuestionOptions(
+                    question,
+                    group
+                );
 
-    const options =
-        normalizeOptions(
-            group.options ||
-            group.paragraphs ||
-            group.choices ||
-            []
-        );
-
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        control.appendChild(
-            createSelect(
-                question.number,
-                options,
-                true
-            )
-        );
-
-        box.appendChild(card);
-    });
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    options,
+                    true
+                )
+            );
+        }
+    );
 }
 
-/* =========================================================
+/* ============================================================
    MATCHING FEATURES
-   DRAG + DROP + CLICK
-========================================================= */
+============================================================ */
 
-function renderMatchingFeatures(box, group) {
-
+function renderMatchingFeatures(
+    box,
+    group
+) {
     const options =
-        normalizeOptions(
-            group.options ||
-            group.features ||
-            group.choices ||
-            []
+        getQuestionOptions(
+            null,
+            group
         );
-
-    const container =
-        document.createElement("div");
-
-    container.className =
-        "matching-features-container";
 
     const bank =
         document.createElement("div");
 
     bank.className =
-        "drag-option-bank";
+        "matching-features-bank";
 
-    bank.innerHTML = `
-        <div class="drag-bank-title">
-            Choose an option:
-        </div>
-    `;
+    options.forEach(function (option, index) {
+        const value =
+            getOptionValue(option);
 
-    const bankItems =
-        document.createElement("div");
+        const label =
+            getOptionLabel(option);
 
-    bankItems.className =
-        "drag-options";
+        const element =
+            document.createElement("button");
 
-    options.forEach(option => {
+        element.type = "button";
 
-        bankItems.appendChild(
-            createDragOption(
-                option,
-                "drag-option"
-            )
+        element.className =
+            "drag-option";
+
+        element.dataset.value =
+            value;
+
+        element.dataset.index =
+            index;
+
+        element.textContent =
+            label;
+
+        setupDragOption(
+            element,
+            value
         );
+
+        bank.appendChild(element);
     });
 
-    bank.appendChild(bankItems);
+    box.appendChild(bank);
 
-    container.appendChild(bank);
+    (group.questions || []).forEach(
+        function (question) {
+            const wrapper =
+                document.createElement("div");
 
-    (group.questions || []).forEach(question => {
+            wrapper.className =
+                "drag-question";
 
-        const row =
-            document.createElement("div");
-
-        row.className =
-            "drag-question";
-
-        row.innerHTML = `
-            <div class="drag-question-text">
-                <strong>${escapeHTML(question.number)}</strong>
-                ${formatQuestionText(question.text || "")}
-            </div>
-
-            <div
-                class="drag-drop-zone"
-                data-question-number="${escapeAttr(question.number)}"
-            >
-                <span class="drop-placeholder">
-                    Drop / select answer
-                </span>
-            </div>
-        `;
-
-        container.appendChild(row);
-
-        setupDropZone(
-            row.querySelector(".drag-drop-zone")
-        );
-    });
-
-    box.appendChild(container);
-}
-
-/* =========================================================
-   ANSWER BOX
-========================================================= */
-
-function renderAnswerBox(box, group) {
-
-    (group.questions || []).forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        const input =
-            document.createElement("input");
-
-        input.type = "text";
-
-        input.className =
-            "answer-input";
-
-        input.dataset.questionNumber =
-            question.number;
-
-        input.placeholder =
-            "Your answer";
-
-        control.appendChild(input);
-
-        box.appendChild(card);
-    });
-}
-
-/* =========================================================
-   GENERIC
-========================================================= */
-
-function renderGenericQuestions(box, group) {
-
-    const questions =
-        group.questions || [];
-
-    questions.forEach(question => {
-
-        const card =
-            createQuestionCard(question);
-
-        const control =
-            card.querySelector(".question-control");
-
-        const options =
-            getOptions(question, group);
-
-        if (options.length) {
-
-            control.appendChild(
-                createSelect(
-                    question.number,
-                    options,
-                    true
-                )
-            );
-
-        } else {
-
-            const input =
-                document.createElement("input");
-
-            input.type = "text";
-
-            input.className =
-                "answer-input";
-
-            input.dataset.questionNumber =
+            wrapper.dataset.questionNumber =
                 question.number;
 
-            input.placeholder =
-                "Your answer";
+            wrapper.innerHTML = `
+                <div class="question-number">
+                    ${question.number}
+                </div>
 
-            control.appendChild(input);
+                <div class="question-text">
+                    ${escapeHTML(
+                        getQuestionText(
+                            question
+                        )
+                    )}
+                </div>
+
+                <div
+                    class="drop-zone"
+                    data-question-number="${question.number}"
+                    tabindex="0"
+                >
+                    <span class="drop-zone-value">
+                        Drop / select answer
+                    </span>
+                </div>
+            `;
+
+            const zone =
+                wrapper.querySelector(
+                    ".drop-zone"
+                );
+
+            setupDropZone(
+                zone,
+                question.number
+            );
+
+            box.appendChild(wrapper);
         }
-
-        box.appendChild(card);
-    });
-}
-
-/* =========================================================
-   SELECT
-========================================================= */
-
-function createSelect(
-    number,
-    options,
-    allowLetters = false
-) {
-
-    const select =
-        document.createElement("select");
-
-    select.dataset.questionNumber =
-        number;
-
-    select.className =
-        "question-select";
-
-    const placeholder =
-        document.createElement("option");
-
-    placeholder.value = "";
-
-    placeholder.textContent =
-        "Select your answer";
-
-    placeholder.disabled = false;
-
-    placeholder.selected = true;
-
-    select.appendChild(placeholder);
-
-    normalizeOptions(options).forEach(option => {
-
-        const opt =
-            document.createElement("option");
-
-        const normalized =
-            normalizeOption(option);
-
-        opt.value =
-            normalized.value;
-
-        opt.textContent =
-            normalized.text;
-
-        select.appendChild(opt);
-    });
-
-    return select;
-}
-
-/* =========================================================
-   OPTIONS
-========================================================= */
-
-function getOptions(question, group) {
-
-    return normalizeOptions(
-        question.options ||
-        question.choices ||
-        question.answerOptions ||
-        group.options ||
-        group.choices ||
-        group.answerOptions ||
-        []
     );
 }
 
-function normalizeOptions(options) {
+/* ============================================================
+   ANSWER BOX
+============================================================ */
 
-    if (!Array.isArray(options)) {
-
-        if (
-            options &&
-            typeof options === "object"
-        ) {
-
-            return Object.entries(options)
-                .map(([key, value]) => ({
-                    value: key,
-                    text: String(value)
-                }));
-        }
-
-        return [];
-    }
-
-    return options
-        .map(normalizeOption)
-        .filter(option => option.text);
-}
-
-function normalizeOption(option) {
-
-    if (
-        option === null ||
-        option === undefined
-    ) {
-        return {
-            value: "",
-            text: ""
-        };
-    }
-
-    if (
-        typeof option === "string" ||
-        typeof option === "number"
-    ) {
-
-        return {
-            value: String(option),
-            text: String(option)
-        };
-    }
-
-    if (typeof option === "object") {
-
-        const value =
-            option.value ??
-            option.letter ??
-            option.id ??
-            option.key ??
-            option.text ??
-            "";
-
-        const text =
-            option.text ??
-            option.label ??
-            option.name ??
-            option.value ??
-            option.letter ??
-            option.id ??
-            "";
-
-        return {
-            value: String(value),
-            text: String(text)
-        };
-    }
-
-    return {
-        value: "",
-        text: ""
-    };
-}
-
-/* =========================================================
-   DRAG OPTIONS
-========================================================= */
-
-function createDragOption(
-    option,
-    className
+function renderAnswerBox(
+    box,
+    group
 ) {
+    (group.questions || []).forEach(
+        function (question) {
+            const item =
+                createQuestionItem(
+                    question
+                );
 
-    const normalized =
-        normalizeOption(option);
+            const control =
+                item.querySelector(
+                    ".question-control"
+                );
 
-    const element =
+            if (!control) {
+                return;
+            }
+
+            control.innerHTML = `
+                <input
+                    type="text"
+                    class="answer-input"
+                    data-question-number="${question.number}"
+                    autocomplete="off"
+                    spellcheck="false"
+                    placeholder="Type your answer"
+                >
+            `;
+
+            attachInputListener(control);
+
+            box.appendChild(item);
+        }
+    );
+}
+
+/* ============================================================
+   GENERIC FALLBACK
+============================================================ */
+
+function renderGenericGroup(
+    box,
+    group
+) {
+    (group.questions || []).forEach(
+        function (question) {
+            const options =
+                getQuestionOptions(
+                    question,
+                    group
+                );
+
+            box.appendChild(
+                createQuestionItem(
+                    question,
+                    options
+                )
+            );
+        }
+    );
+}
+
+/* ============================================================
+   CREATE QUESTION
+============================================================ */
+
+function createQuestionItem(
+    question,
+    options = [],
+    selectMode = false,
+    radioMode = false
+) {
+    const wrapper =
         document.createElement("div");
 
-    element.className =
-        className;
+    wrapper.className =
+        "question";
 
+    wrapper.dataset.questionNumber =
+        question.number;
+
+    const text =
+        getQuestionText(question);
+
+    wrapper.innerHTML = `
+        <div class="question-header">
+            <span class="question-number">
+                ${question.number}
+            </span>
+
+            <span class="question-text">
+                ${escapeHTML(text)}
+            </span>
+        </div>
+
+        <div class="question-control"></div>
+    `;
+
+    const control =
+        wrapper.querySelector(
+            ".question-control"
+        );
+
+    if (selectMode) {
+        const select =
+            document.createElement("select");
+
+        select.className =
+            "answer-select";
+
+        select.dataset.questionNumber =
+            question.number;
+
+        select.innerHTML = `
+            <option value="">
+                Select an answer
+            </option>
+        `;
+
+        options.forEach(function (option) {
+            const value =
+                getOptionValue(option);
+
+            const label =
+                getOptionLabel(option);
+
+            const optionElement =
+                document.createElement("option");
+
+            optionElement.value =
+                value;
+
+            optionElement.textContent =
+                label;
+
+            select.appendChild(
+                optionElement
+            );
+        });
+
+        select.addEventListener(
+            "change",
+            function () {
+                setAnswer(
+                    Number(
+                        select.dataset
+                            .questionNumber
+                    ),
+                    select.value
+                );
+            }
+        );
+
+        control.appendChild(select);
+
+        return wrapper;
+    }
+
+    if (options.length) {
+        options.forEach(function (option) {
+            const value =
+                getOptionValue(option);
+
+            const label =
+                getOptionLabel(option);
+
+            const optionLabel =
+                document.createElement(
+                    "label"
+                );
+
+            optionLabel.className =
+                "choice-option";
+
+            optionLabel.innerHTML = `
+                <input
+                    type="${
+                        radioMode
+                            ? "radio"
+                            : "radio"
+                    }"
+                    name="question_${question.number}"
+                    value="${escapeAttribute(
+                        value
+                    )}"
+                    data-question-number="${question.number}"
+                >
+
+                <span>
+                    ${escapeHTML(label)}
+                </span>
+            `;
+
+            const input =
+                optionLabel.querySelector(
+                    "input"
+                );
+
+            input.addEventListener(
+                "change",
+                function () {
+                    setAnswer(
+                        Number(
+                            input.dataset
+                                .questionNumber
+                        ),
+                        input.value
+                    );
+                }
+            );
+
+            control.appendChild(
+                optionLabel
+            );
+        });
+    }
+
+    return wrapper;
+}
+
+/* ============================================================
+   QUESTION HELPERS
+============================================================ */
+
+function getQuestionText(question) {
+    return (
+        question.question ||
+        question.text ||
+        question.statement ||
+        question.prompt ||
+        question.title ||
+        ""
+    );
+}
+
+function getQuestionOptions(
+    question,
+    group
+) {
+    const sources = [
+        question &&
+            question.options,
+        question &&
+            question.choices,
+        question &&
+            question.answerOptions,
+
+        group &&
+            group.options,
+        group &&
+            group.choices,
+        group &&
+            group.answerOptions,
+        group &&
+            group.headings,
+        group &&
+            group.features,
+        group &&
+            group.words,
+        group &&
+            group.wordBank
+    ];
+
+    for (const source of sources) {
+        if (Array.isArray(source) && source.length) {
+            return uniqueOptions(source);
+        }
+
+        if (
+            source &&
+            typeof source === "object"
+        ) {
+            return uniqueOptions(
+                Object.entries(source).map(
+                    function ([key, value]) {
+                        if (
+                            typeof value ===
+                            "object"
+                        ) {
+                            return {
+                                ...value,
+                                value:
+                                    value.value ||
+                                    key,
+                                label:
+                                    value.label ||
+                                    value.text ||
+                                    key
+                            };
+                        }
+
+                        return {
+                            value: key,
+                            label: value
+                        };
+                    }
+                )
+            );
+        }
+    }
+
+    return [];
+}
+
+function getOptionValue(option) {
+    if (
+        option &&
+        typeof option === "object"
+    ) {
+        return String(
+            option.value ??
+                option.id ??
+                option.key ??
+                option.label ??
+                option.text ??
+                ""
+        );
+    }
+
+    return String(option ?? "");
+}
+
+function getOptionLabel(option) {
+    if (
+        option &&
+        typeof option === "object"
+    ) {
+        return String(
+            option.label ??
+                option.text ??
+                option.title ??
+                option.value ??
+                ""
+        );
+    }
+
+    return String(option ?? "");
+}
+
+function uniqueOptions(options) {
+    const seen = new Set();
+
+    return options.filter(function (option) {
+        const value =
+            getOptionValue(option);
+
+        if (seen.has(value)) {
+            return false;
+        }
+
+        seen.add(value);
+
+        return true;
+    });
+}
+
+/* ============================================================
+   INPUT HANDLING
+============================================================ */
+
+function attachInputListener(container) {
+    container
+        .querySelectorAll(
+            "input[type='text'], textarea"
+        )
+        .forEach(function (input) {
+            input.addEventListener(
+                "input",
+                function () {
+                    const number =
+                        Number(
+                            input.dataset
+                                .questionNumber
+                        );
+
+                    setAnswer(
+                        number,
+                        input.value
+                    );
+                }
+            );
+        });
+}
+
+function setAnswer(
+    number,
+    value
+) {
+    if (
+        number === undefined ||
+        number === null ||
+        !Number.isFinite(Number(number))
+    ) {
+        return;
+    }
+
+    const key = String(number);
+
+    studentAnswers[key] =
+        value;
+
+    saveAnswersToStorage();
+
+    updateQuestionNavigator();
+}
+
+function handleAnswerChange(
+    number,
+    value
+) {
+    setAnswer(number, value);
+}
+
+/* ============================================================
+   DRAG / DROP
+============================================================ */
+
+function setupDragOption(
+    element,
+    value
+) {
     element.draggable = true;
-
-    element.dataset.value =
-        normalized.value;
-
-    element.dataset.text =
-        normalized.text;
-
-    element.innerHTML =
-        escapeHTML(normalized.text);
 
     element.addEventListener(
         "dragstart",
-        event => {
-
-            selectedDragOption =
-                element;
-
-            event.dataTransfer.effectAllowed =
-                "copy";
+        function (event) {
+            selectedDragOption = value;
 
             event.dataTransfer.setData(
                 "text/plain",
-                JSON.stringify({
-                    value:
-                        normalized.value,
-                    text:
-                        normalized.text
-                })
+                value
             );
 
             element.classList.add(
@@ -1816,29 +1943,50 @@ function createDragOption(
 
     element.addEventListener(
         "dragend",
-        () => {
-
+        function () {
             element.classList.remove(
                 "dragging"
             );
-
-            selectedDragOption = null;
         }
     );
 
-    return element;
+    element.addEventListener(
+        "click",
+        function () {
+            selectedDragOption = value;
+
+            document
+                .querySelectorAll(
+                    ".drag-option"
+                )
+                .forEach(function (item) {
+                    item.classList.remove(
+                        "selected"
+                    );
+                });
+
+            element.classList.add(
+                "selected"
+            );
+
+            showToast(
+                "Now select a blank to place the answer."
+            );
+        }
+    );
 }
 
-/* =========================================================
-   DROP ZONES
-========================================================= */
-
-function setupDropZone(zone) {
+function setupDropZone(
+    zone,
+    questionNumber
+) {
+    if (!zone) {
+        return;
+    }
 
     zone.addEventListener(
         "dragover",
-        event => {
-
+        function (event) {
             event.preventDefault();
 
             zone.classList.add(
@@ -1849,8 +1997,7 @@ function setupDropZone(zone) {
 
     zone.addEventListener(
         "dragleave",
-        () => {
-
+        function () {
             zone.classList.remove(
                 "drag-over"
             );
@@ -1859,43 +2006,22 @@ function setupDropZone(zone) {
 
     zone.addEventListener(
         "drop",
-        event => {
-
+        function (event) {
             event.preventDefault();
 
             zone.classList.remove(
                 "drag-over"
             );
 
-            let data = null;
+            const value =
+                event.dataTransfer.getData(
+                    "text/plain"
+                );
 
-            try {
-
-                data =
-                    JSON.parse(
-                        event.dataTransfer.getData(
-                            "text/plain"
-                        )
-                    );
-
-            } catch (error) {}
-
-            if (!data && selectedDragOption) {
-
-                data = {
-                    value:
-                        selectedDragOption.dataset.value,
-                    text:
-                        selectedDragOption.dataset.text
-                };
-            }
-
-            if (data) {
-
-                placeDroppedAnswer(
-                    zone,
-                    data.value,
-                    data.text
+            if (value) {
+                placeDragAnswer(
+                    questionNumber,
+                    value
                 );
             }
         }
@@ -1903,485 +2029,611 @@ function setupDropZone(zone) {
 
     zone.addEventListener(
         "click",
-        () => {
-
-            if (selectedDragOption) {
-
-                placeDroppedAnswer(
-                    zone,
-                    selectedDragOption.dataset.value,
-                    selectedDragOption.dataset.text
+        function () {
+            if (
+                selectedDragOption !==
+                null
+            ) {
+                placeDragAnswer(
+                    questionNumber,
+                    selectedDragOption
                 );
 
-                selectedDragOption.classList.remove(
-                    "selected"
-                );
+                selectedDragOption =
+                    null;
 
-                selectedDragOption = null;
+                document
+                    .querySelectorAll(
+                        ".drag-option"
+                    )
+                    .forEach(function (
+                        item
+                    ) {
+                        item.classList.remove(
+                            "selected"
+                        );
+                    });
             }
         }
     );
 }
 
-/* =========================================================
-   CLICK-TO-SELECT
-========================================================= */
-
-function selectDragOption(element) {
-
-    document
-        .querySelectorAll(
-            ".drag-option.selected, .summary-drag-word.selected"
-        )
-        .forEach(item => {
-            item.classList.remove("selected");
-        });
-
-    element.classList.add("selected");
-
-    selectedDragOption =
-        element;
-
-    showToast(
-        "Now click the answer box."
-    );
-}
-
-/* =========================================================
-   PLACE ANSWER
-========================================================= */
-
-function placeDroppedAnswer(
-    zone,
-    value,
-    text
+function placeDragAnswer(
+    questionNumber,
+    value
 ) {
-
-    const number =
-        zone.dataset.questionNumber;
-
-    if (!number) return;
-
-    studentAnswers[number] =
-        value;
-
-    saveAnswers();
-
-    zone.innerHTML = `
-        <span class="dropped-answer">
-            ${escapeHTML(text)}
-            <button
-                type="button"
-                class="remove-dropped-answer"
-                data-question-number="${escapeAttr(number)}"
-                aria-label="Remove answer"
-            >
-                ×
-            </button>
-        </span>
-    `;
-
-    updateQuestionNavigator();
-}
-
-/* =========================================================
-   REMOVE DROP
-========================================================= */
-
-function removeDroppedAnswer(button) {
-
-    const number =
-        button.dataset.questionNumber;
-
-    delete studentAnswers[number];
-
-    saveAnswers();
+    setAnswer(
+        Number(questionNumber),
+        value
+    );
 
     const zone =
         document.querySelector(
-            `[data-question-number="${CSS.escape(number)}"].drag-drop-zone,
-             [data-question-number="${CSS.escape(number)}"].summary-drop-zone`
+            `.drop-zone[data-question-number="${CSS.escape(
+                String(questionNumber)
+            )}"]`
         );
 
     if (zone) {
-
-        zone.innerHTML = `
-            <span class="drop-placeholder">
-                Drop / select answer
-            </span>
-        `;
-    }
-
-    updateQuestionNavigator();
-}
-
-/* =========================================================
-   SAVE INPUT
-========================================================= */
-
-function saveInputAnswer(input) {
-
-    const number =
-        input.dataset.questionNumber;
-
-    if (!number) return;
-
-    if (
-        input.type === "checkbox"
-    ) {
-
-        const boxes =
-            document.querySelectorAll(
-                `input[type="checkbox"][data-question-number="${CSS.escape(number)}"]`
+        const valueElement =
+            zone.querySelector(
+                ".drop-zone-value"
             );
 
-        const values =
-            [...boxes]
-                .filter(box => box.checked)
-                .map(box => box.value);
+        if (valueElement) {
+            valueElement.textContent =
+                value;
+        } else {
+            zone.textContent =
+                value;
+        }
 
-        studentAnswers[number] =
-            values;
-
-    } else {
-
-        studentAnswers[number] =
-            input.value;
+        zone.classList.add(
+            "filled"
+        );
     }
 
-    saveAnswers();
-
     updateQuestionNavigator();
 }
 
-/* =========================================================
-   RESTORE ANSWERS
-========================================================= */
+function restoreDragDropAnswers() {
+    Object.keys(
+        studentAnswers
+    ).forEach(function (number) {
+        const value =
+            studentAnswers[number];
 
-function restoreAnswersToDOM() {
+        if (
+            value === undefined ||
+            value === null ||
+            String(value).trim() === ""
+        ) {
+            return;
+        }
 
-    Object.entries(studentAnswers)
-        .forEach(([number, answer]) => {
+        const zone =
+            document.querySelector(
+                `.drop-zone[data-question-number="${CSS.escape(
+                    String(number)
+                )}"]`
+            );
 
-            const value =
-                answer;
+        if (!zone) {
+            return;
+        }
 
-            const input =
-                document.querySelector(
-                    `[data-question-number="${CSS.escape(number)}"]`
-                );
+        const valueElement =
+            zone.querySelector(
+                ".drop-zone-value"
+            );
 
-            if (!input) return;
+        if (valueElement) {
+            valueElement.textContent =
+                Array.isArray(value)
+                    ? value.join(", ")
+                    : value;
+        } else {
+            zone.textContent =
+                Array.isArray(value)
+                    ? value.join(", ")
+                    : value;
+        }
 
-            if (input.tagName === "SELECT") {
-
-                input.value =
-                    Array.isArray(value)
-                        ? value[0] || ""
-                        : String(value);
-
-            } else if (
-                input.type === "checkbox"
-            ) {
-
-                const values =
-                    Array.isArray(value)
-                        ? value
-                        : [value];
-
-                document
-                    .querySelectorAll(
-                        `input[type="checkbox"][data-question-number="${CSS.escape(number)}"]`
-                    )
-                    .forEach(box => {
-
-                        box.checked =
-                            values
-                                .map(String)
-                                .includes(
-                                    String(box.value)
-                                );
-                    });
-
-            } else if (
-                input.type !== "radio"
-            ) {
-
-                input.value =
-                    Array.isArray(value)
-                        ? value[0] || ""
-                        : value;
-            }
-        });
-
-    restoreDropZones();
-
-    updateQuestionNavigator();
+        zone.classList.add(
+            "filled"
+        );
+    });
 }
 
-function restoreDropZones() {
+/* ============================================================
+   SAVE ANSWERS
+============================================================ */
 
-    document
-        .querySelectorAll(
-            ".drag-drop-zone, .summary-drop-zone"
-        )
-        .forEach(zone => {
-
-            const number =
-                zone.dataset.questionNumber;
-
-            const answer =
-                studentAnswers[number];
-
-            if (
-                answer === undefined ||
-                answer === null ||
-                answer === ""
-            ) return;
-
-            const text =
-                String(answer);
-
-            zone.innerHTML = `
-                <span class="dropped-answer">
-                    ${escapeHTML(text)}
-                    <button
-                        type="button"
-                        class="remove-dropped-answer"
-                        data-question-number="${escapeAttr(number)}"
-                    >
-                        ×
-                    </button>
-                </span>
-            `;
-        });
+function getAnswerStorageKey() {
+    return `ieltsReadingAnswers_${currentTestNumber}`;
 }
 
-/* =========================================================
-   LOCAL STORAGE
-========================================================= */
-
-function storageKey() {
-
-    return (
-        CONFIG.STORAGE_PREFIX +
-        "test_" +
-        currentTestNumber
-    );
-}
-
-function saveAnswers() {
-
-    if (!currentTestNumber) return;
+function saveAnswersToStorage() {
+    if (!currentTestNumber) {
+        return;
+    }
 
     try {
-
         localStorage.setItem(
-            storageKey(),
-            JSON.stringify(studentAnswers)
+            getAnswerStorageKey(),
+            JSON.stringify(
+                studentAnswers
+            )
         );
-
     } catch (error) {
         console.warn(
-            "Could not save answers."
+            "Could not save answers.",
+            error
         );
     }
 }
 
 function loadSavedAnswers() {
+    if (!currentTestNumber) {
+        return;
+    }
 
     try {
-
-        const data =
+        const raw =
             localStorage.getItem(
-                storageKey()
+                getAnswerStorageKey()
             );
 
-        if (!data) return {};
+        if (!raw) {
+            return;
+        }
 
-        const parsed =
-            JSON.parse(data);
+        const saved =
+            JSON.parse(raw);
 
-        return parsed &&
-            typeof parsed === "object"
-            ? parsed
-            : {};
-
+        if (
+            saved &&
+            typeof saved === "object"
+        ) {
+            studentAnswers =
+                saved;
+        }
     } catch (error) {
+        console.warn(
+            "Could not load saved answers.",
+            error
+        );
 
-        return {};
+        studentAnswers = {};
     }
 }
 
-function clearSavedAnswers() {
+function clearCurrentTestAnswers() {
+    if (!currentTestNumber) {
+        return;
+    }
 
-    try {
-        localStorage.removeItem(
-            storageKey()
-        );
-    } catch (error) {}
+    localStorage.removeItem(
+        getAnswerStorageKey()
+    );
+
+    studentAnswers = {};
 }
 
-/* =========================================================
+/* ============================================================
+   RESTORE VISIBLE ANSWERS
+============================================================ */
+
+function restoreAnswers() {
+    Object.keys(
+        studentAnswers
+    ).forEach(function (number) {
+        const value =
+            studentAnswers[number];
+
+        const selector =
+            `[data-question-number="${CSS.escape(
+                String(number)
+            )}"]`;
+
+        document
+            .querySelectorAll(selector)
+            .forEach(function (element) {
+                if (
+                    element.tagName ===
+                    "INPUT"
+                ) {
+                    if (
+                        element.type ===
+                        "checkbox"
+                    ) {
+                        const values =
+                            Array.isArray(
+                                value
+                            )
+                                ? value
+                                : [value];
+
+                        element.checked =
+                            values.some(
+                                function (
+                                    item
+                                ) {
+                                    return (
+                                        normalizeAnswer(
+                                            item
+                                        ) ===
+                                        normalizeAnswer(
+                                            element.value
+                                        )
+                                    );
+                                }
+                            );
+                    } else if (
+                        element.type ===
+                        "radio"
+                    ) {
+                        element.checked =
+                            normalizeAnswer(
+                                element.value
+                            ) ===
+                            normalizeAnswer(
+                                value
+                            );
+                    } else {
+                        element.value =
+                            Array.isArray(
+                                value
+                            )
+                                ? value.join(
+                                      ", "
+                                  )
+                                : value;
+                    }
+                }
+
+                if (
+                    element.tagName ===
+                    "SELECT"
+                ) {
+                    element.value =
+                        String(value);
+                }
+            });
+    });
+
+    restoreDragDropAnswers();
+}
+
+/* ============================================================
+   SAVE ALL VISIBLE ANSWERS
+============================================================ */
+
+function saveAllVisibleAnswers() {
+    document
+        .querySelectorAll(
+            "[data-question-number]"
+        )
+        .forEach(function (element) {
+            const number =
+                Number(
+                    element.dataset
+                        .questionNumber
+                );
+
+            if (
+                !Number.isFinite(number)
+            ) {
+                return;
+            }
+
+            if (
+                element.tagName ===
+                    "INPUT" &&
+                element.type ===
+                    "checkbox"
+            ) {
+                return;
+            }
+
+            if (
+                element.tagName ===
+                    "INPUT" ||
+                element.tagName ===
+                    "TEXTAREA" ||
+                element.tagName ===
+                    "SELECT"
+            ) {
+                setAnswer(
+                    number,
+                    element.value
+                );
+            }
+        });
+
+    document
+        .querySelectorAll(
+            "input[type='checkbox'][data-question-number]"
+        )
+        .forEach(function (input) {
+            const number =
+                Number(
+                    input.dataset
+                        .questionNumber
+                );
+
+            const parent =
+                input.closest(
+                    ".question-control"
+                );
+
+            if (!parent) {
+                return;
+            }
+
+            const values =
+                Array.from(
+                    parent.querySelectorAll(
+                        "input[type='checkbox']:checked"
+                    )
+                ).map(function (item) {
+                    return item.value;
+                });
+
+            setAnswer(
+                number,
+                values
+            );
+        });
+
+    saveAnswersToStorage();
+}
+
+/* ============================================================
    QUESTION NAVIGATOR
-========================================================= */
+============================================================ */
+
+function getAllQuestionNumbers() {
+    if (!currentTest) {
+        return [];
+    }
+
+    const numbers = [];
+
+    currentTest.parts.forEach(
+        function (part) {
+            (part.questionGroups || [])
+                .forEach(function (group) {
+                    (group.questions || [])
+                        .forEach(
+                            function (
+                                question
+                            ) {
+                                const n =
+                                    Number(
+                                        question.number
+                                    );
+
+                                if (
+                                    Number.isFinite(
+                                        n
+                                    )
+                                ) {
+                                    numbers.push(
+                                        n
+                                    );
+                                }
+                            }
+                        );
+
+                    (group.blanks || [])
+                        .forEach(
+                            function (
+                                blank
+                            ) {
+                                const n =
+                                    Number(
+                                        blank.number
+                                    );
+
+                                if (
+                                    Number.isFinite(
+                                        n
+                                    )
+                                ) {
+                                    numbers.push(
+                                        n
+                                    );
+                                }
+                            }
+                        );
+                });
+        }
+    );
+
+    return [
+        ...new Set(numbers)
+    ].sort(function (a, b) {
+        return a - b;
+    });
+}
 
 function renderQuestionNavigator() {
+    const nav =
+        document.getElementById(
+            "questionNavigator"
+        );
 
-    const containers = [
-        $("questionNavigator"),
-        $("questionNav"),
-        $("questionNumberNav"),
-        $("questionNumbers")
-    ].filter(Boolean);
+    if (!nav) {
+        return;
+    }
 
-    if (!containers.length) return;
+    const numbers =
+        getAllQuestionNumbers();
 
-    containers.forEach(container => {
+    nav.innerHTML =
+        numbers
+            .map(function (number) {
+                return `
+                    <button
+                        type="button"
+                        class="question-nav-item"
+                        data-question-nav="${number}"
+                    >
+                        ${number}
+                    </button>
+                `;
+            })
+            .join("");
 
-        container.innerHTML = "";
-
-        const numbers =
-            getPartQuestionNumbers(
-                currentTest.parts[
-                    currentPartIndex
-                ]
+    nav
+        .querySelectorAll(
+            "[data-question-nav]"
+        )
+        .forEach(function (button) {
+            button.addEventListener(
+                "click",
+                function () {
+                    jumpToQuestion(
+                        Number(
+                            button.dataset
+                                .questionNav
+                        )
+                    );
+                }
             );
-
-        numbers.forEach(number => {
-
-            const button =
-                document.createElement("button");
-
-            button.type = "button";
-
-            button.className =
-                "question-nav-button";
-
-            button.dataset.questionNav =
-                number;
-
-            button.textContent =
-                number;
-
-            container.appendChild(button);
         });
-    });
 
     updateQuestionNavigator();
 }
 
 function updateQuestionNavigator() {
+    const nav =
+        document.getElementById(
+            "questionNavigator"
+        );
 
-    document
+    if (!nav) {
+        return;
+    }
+
+    nav
         .querySelectorAll(
             "[data-question-nav]"
         )
-        .forEach(button => {
-
+        .forEach(function (button) {
             const number =
-                button.dataset.questionNav;
-
-            const answer =
-                studentAnswers[number];
-
-            const answered =
-                isAnswered(answer);
+                Number(
+                    button.dataset
+                        .questionNav
+                );
 
             button.classList.toggle(
                 "answered",
-                answered
-            );
-
-            button.classList.toggle(
-                "current",
-                questionIsVisible(number)
+                isQuestionAnswered(
+                    number
+                )
             );
         });
 }
 
-function questionIsVisible(number) {
+function isQuestionAnswered(number) {
+    const value =
+        studentAnswers[
+            String(number)
+        ];
 
-    const element =
-        document.querySelector(
-            `[data-question-number="${CSS.escape(String(number))}"]`
+    if (
+        value === undefined ||
+        value === null
+    ) {
+        return false;
+    }
+
+    if (Array.isArray(value)) {
+        return value.some(
+            function (item) {
+                return (
+                    String(
+                        item
+                    ).trim() !== ""
+                );
+            }
         );
+    }
 
-    if (!element) return false;
-
-    const card =
-        element.closest(
-            ".question-card, .drag-question, .summary-blank-row"
-        );
-
-    return !!card;
+    return (
+        String(value).trim() !== ""
+    );
 }
 
 function jumpToQuestion(number) {
-
-    const selector =
-        `[data-question-number="${CSS.escape(String(number))}"]`;
-
     const element =
-        document.querySelector(selector);
-
-    if (!element) return;
-
-    const card =
-        element.closest(
-            ".question-card, .drag-question, .summary-blank-row"
-        ) || element;
-
-    card.scrollIntoView({
-        behavior: "smooth",
-        block: "center"
-    });
-
-    card.classList.add(
-        "question-highlight"
-    );
-
-    setTimeout(() => {
-        card.classList.remove(
-            "question-highlight"
+        document.querySelector(
+            `[data-question-number="${CSS.escape(
+                String(number)
+            )}"]`
         );
-    }, 1000);
-}
 
-/* =========================================================
-   NAVIGATION
-========================================================= */
-
-function previousPart() {
-
-    if (currentPartIndex <= 0) return;
-
-    currentPartIndex--;
-
-    renderCurrentPart();
-}
-
-function nextPart() {
-
-    if (
-        currentPartIndex >=
-        currentTest.parts.length - 1
-    ) {
+    if (!element) {
         return;
     }
 
-    currentPartIndex++;
+    const question =
+        element.closest(
+            ".question, .drag-question"
+        );
 
-    renderCurrentPart();
+    (
+        question ||
+        element
+    ).scrollIntoView({
+        behavior: "smooth",
+        block: "center"
+    });
+}
+
+/* ============================================================
+   PART NAVIGATION
+============================================================ */
+
+function nextPart() {
+    saveAllVisibleAnswers();
+
+    if (
+        currentPartIndex <
+        currentTest.parts.length - 1
+    ) {
+        currentPartIndex++;
+
+        renderCurrentPart();
+    } else {
+        confirmSubmitTest();
+    }
+}
+
+function previousPart() {
+    saveAllVisibleAnswers();
+
+    if (
+        currentPartIndex > 0
+    ) {
+        currentPartIndex--;
+
+        renderCurrentPart();
+    }
 }
 
 function updatePartButtons() {
-
     const previous =
-        $("previousPartButton");
+        document.getElementById(
+            "previousPartButton"
+        );
 
     const next =
-        $("nextPartButton");
+        document.getElementById(
+            "nextPartButton"
+        );
 
     if (previous) {
         previous.disabled =
@@ -2389,110 +2641,135 @@ function updatePartButtons() {
     }
 
     if (next) {
-
-        next.disabled =
+        next.textContent =
             currentPartIndex ===
-            currentTest.parts.length - 1;
+            currentTest.parts.length - 1
+                ? "Submit Test →"
+                : "Next Part →";
     }
 }
 
-/* =========================================================
-   ANSWER STATUS
-========================================================= */
+function scrollTestPanelsToTop() {
+    [
+        "passagePanel",
+        "questionsPanel",
+        "passageContent",
+        "questionsContent"
+    ].forEach(function (id) {
+        const element =
+            document.getElementById(id);
 
-function isAnswered(value) {
+        if (element) {
+            element.scrollTop = 0;
+        }
+    });
 
-    if (value === undefined || value === null) {
-        return false;
-    }
-
-    if (Array.isArray(value)) {
-        return value.some(
-            item =>
-                String(item).trim() !== ""
-        );
-    }
-
-    return String(value).trim() !== "";
+    window.scrollTo({
+        top: 0,
+        behavior: "instant"
+    });
 }
 
-function countAnsweredAnswers(answerSet) {
-
-    return getAllQuestionNumbers()
-        .filter(
-            number =>
-                isAnswered(
-                    answerSet[number]
-                )
-        )
-        .length;
-}
-
-/* =========================================================
-   SUBMIT
-========================================================= */
+/* ============================================================
+   SUBMISSION
+============================================================ */
 
 function confirmSubmitTest() {
-
-    if (testSubmitted) return;
-
-    const unanswered =
-        getAllQuestionNumbers()
-            .filter(
-                number =>
-                    !isAnswered(
-                        studentAnswers[number]
-                    )
-            ).length;
-
-    const message =
-        unanswered > 0
-            ? `You have ${unanswered} unanswered question(s). Submit anyway?`
-            : "Submit your Reading test?";
-
-    if (
-        window.confirm(message)
-    ) {
-        submitTest();
+    if (!currentTest) {
+        return;
     }
+
+    saveAllVisibleAnswers();
+
+    openConfirmModal(
+        "Submit Test?",
+        "Are you sure you want to submit your answers?"
+    );
+}
+
+function confirmExitTest() {
+    openConfirmModal(
+        "Leave Test?",
+        "Your answers are saved locally. Do you want to leave this test?"
+    );
+}
+
+function openConfirmModal(
+    title,
+    message
+) {
+    const modal =
+        document.getElementById(
+            "confirmModal"
+        );
+
+    if (!modal) {
+        if (
+            confirm(
+                `${title}\n\n${message}`
+            )
+        ) {
+            if (
+                title.toLowerCase().includes(
+                    "submit"
+                )
+            ) {
+                submitTest();
+            } else {
+                showDashboard();
+            }
+        }
+
+        return;
+    }
+
+    setText(
+        "confirmModalTitle",
+        title
+    );
+
+    setText(
+        "confirmModalMessage",
+        message
+    );
+
+    modal.style.display = "flex";
+
+    modal.dataset.action =
+        title.toLowerCase().includes(
+            "submit"
+        )
+            ? "submit"
+            : "exit";
 }
 
 function closeConfirmModal() {
-
     const modal =
-        $("confirmModal");
+        document.getElementById(
+            "confirmModal"
+        );
 
     if (modal) {
-        modal.style.display = "none";
+        modal.style.display =
+            "none";
     }
 }
 
-function autoSubmitTest() {
-
-    if (testSubmitted) return;
-
-    submitTest();
-}
-
 function submitTest() {
+    closeConfirmModal();
 
-    if (testSubmitted) return;
-
-    testSubmitted = true;
+    saveAllVisibleAnswers();
 
     stopTimer();
 
     testElapsedSeconds =
-        Math.max(
-            0,
-            Math.floor(
-                (Date.now() - testStartTime) / 1000
-            )
-        );
+        calculateTimeUsed();
 
     submittedAnswers =
         JSON.parse(
-            JSON.stringify(studentAnswers)
+            JSON.stringify(
+                studentAnswers
+            )
         );
 
     scoreData =
@@ -2500,67 +2777,193 @@ function submitTest() {
             submittedAnswers
         );
 
-    clearSavedAnswers();
+    testSubmitted = true;
+    testStarted = false;
 
     renderResult();
 }
 
-/* =========================================================
-   SCORE
-========================================================= */
+function autoSubmitTest() {
+    if (testSubmitted) {
+        return;
+    }
 
-function calculateScore(answerSet) {
+    saveAllVisibleAnswers();
 
+    submittedAnswers =
+        JSON.parse(
+            JSON.stringify(
+                studentAnswers
+            )
+        );
+
+    testElapsedSeconds =
+        calculateTimeUsed();
+
+    scoreData =
+        calculateScore(
+            submittedAnswers
+        );
+
+    testSubmitted = true;
+    testStarted = false;
+
+    renderResult();
+}
+
+/* ============================================================
+   TIME
+============================================================ */
+
+function calculateTimeUsed() {
+    if (!testStartTime) {
+        return testElapsedSeconds;
+    }
+
+    const duration =
+        Math.floor(
+            (Date.now() -
+                testStartTime) /
+                1000
+        );
+
+    const totalDuration =
+        (
+            Number(
+                currentTest?.duration
+            ) ||
+            CONFIG.DEFAULT_DURATION
+        ) * 60;
+
+    return Math.min(
+        duration,
+        totalDuration
+    );
+}
+
+function formatTime(seconds) {
+    seconds =
+        Math.max(
+            0,
+            Number(seconds) || 0
+        );
+
+    const minutes =
+        Math.floor(
+            seconds / 60
+        );
+
+    const remaining =
+        seconds % 60;
+
+    return `${String(
+        minutes
+    ).padStart(2, "0")}:${String(
+        remaining
+    ).padStart(2, "0")}`;
+}
+
+/* ============================================================
+   SCORING
+============================================================ */
+
+function calculateScore(
+    answerSet = studentAnswers
+) {
     let total = 0;
 
     const partScores = [];
     const partTotals = [];
 
-    (currentTest.parts || []).forEach(part => {
+    currentTest.parts.forEach(
+        function (part, partIndex) {
+            let partScore = 0;
+            let partTotal = 0;
 
-        let partScore = 0;
-        let partTotal = 0;
+            (
+                part.questionGroups ||
+                []
+            ).forEach(
+                function (group) {
+                    (
+                        group.questions ||
+                        []
+                    ).forEach(
+                        function (
+                            question
+                        ) {
+                            partTotal++;
 
-        (part.questionGroups || [])
-            .forEach(group => {
+                            if (
+                                answersMatch(
+                                    answerSet[
+                                        question.number
+                                    ],
+                                    question.answer ??
+                                        question.correctAnswer ??
+                                        question.correct
+                                )
+                            ) {
+                                partScore++;
+                                total++;
+                            }
+                        }
+                    );
 
-                const questions = [
-                    ...(group.questions || []),
-                    ...(group.blanks || [])
-                ];
+                    (
+                        group.blanks ||
+                        []
+                    ).forEach(
+                        function (
+                            blank
+                        ) {
+                            partTotal++;
 
-                questions.forEach(question => {
+                            if (
+                                answersMatch(
+                                    answerSet[
+                                        blank.number
+                                    ],
+                                    blank.answer ??
+                                        blank.correctAnswer ??
+                                        blank.correct
+                                )
+                            ) {
+                                partScore++;
+                                total++;
+                            }
+                        }
+                    );
+                }
+            );
 
-                    partTotal++;
+            partScores.push(
+                partScore
+            );
 
-                    const given =
-                        answerSet[
-                            question.number
-                        ];
+            partTotals.push(
+                partTotal
+            );
+        }
+    );
 
-                    if (
-                        answersMatch(
-                            given,
-                            question.answer
-                        )
-                    ) {
-                        partScore++;
-                    }
-                });
-            });
-
-        partScores.push(partScore);
-        partTotals.push(partTotal);
-
-        total += partScore;
-    });
+    const totalQuestions =
+        partTotals.reduce(
+            function (a, b) {
+                return a + b;
+            },
+            0
+        );
 
     return {
         totalScore: total,
-        totalQuestions: countTotalQuestions(),
+        totalQuestions,
         partScores,
         partTotals,
-        band: calculateIELTSBand(total),
+        band:
+            calculateIELTSBand(
+                total
+            ),
         timeUsed:
             formatTime(
                 testElapsedSeconds
@@ -2568,12 +2971,22 @@ function calculateScore(answerSet) {
     };
 }
 
-/* =========================================================
+function countTotalQuestions() {
+    if (!currentTest) {
+        return 0;
+    }
+
+    return getAllQuestionObjects().length;
+}
+
+/* ============================================================
    ANSWER MATCHING
-========================================================= */
+============================================================ */
 
-function answersMatch(given, correct) {
-
+function answersMatch(
+    given,
+    correct
+) {
     if (
         given === undefined ||
         given === null ||
@@ -2583,73 +2996,196 @@ function answersMatch(given, correct) {
         return false;
     }
 
-    const givenArray =
-        Array.isArray(given)
-            ? given
-            : [given];
-
-    const correctArray =
-        Array.isArray(correct)
-            ? correct
-            : [correct];
-
-    const normalizedGiven =
-        givenArray
-            .map(normalizeAnswer)
-            .filter(Boolean);
-
-    const normalizedCorrect =
-        correctArray
-            .map(normalizeAnswer)
-            .filter(Boolean);
-
     if (
-        normalizedGiven.length !==
-        normalizedCorrect.length
+        Array.isArray(correct)
     ) {
-        return false;
+        if (
+            Array.isArray(given)
+        ) {
+            const givenValues =
+                given.map(
+                    normalizeAnswer
+                );
+
+            const correctValues =
+                correct.map(
+                    normalizeAnswer
+                );
+
+            if (
+                givenValues.length !==
+                correctValues.length
+            ) {
+                return false;
+            }
+
+            return (
+                givenValues.every(
+                    function (value) {
+                        return correctValues.includes(
+                            value
+                        );
+                    }
+                )
+            );
+        }
+
+        return correct.some(
+            function (answer) {
+                return (
+                    normalizeAnswer(
+                        given
+                    ) ===
+                    normalizeAnswer(
+                        answer
+                    )
+                );
+            }
+        );
     }
 
-    return normalizedGiven
-        .every(
-            value =>
-                normalizedCorrect.includes(value)
+    if (
+        Array.isArray(given)
+    ) {
+        return given.some(
+            function (answer) {
+                return (
+                    normalizeAnswer(
+                        answer
+                    ) ===
+                    normalizeAnswer(
+                        correct
+                    )
+                );
+            }
         );
+    }
+
+    return (
+        normalizeAnswer(
+            given
+        ) ===
+        normalizeAnswer(
+            correct
+        )
+    );
 }
 
-/* =========================================================
-   IELTS READING BAND
-========================================================= */
+function normalizeAnswer(value) {
+    return String(
+        value ?? ""
+    )
+        .trim()
+        .replace(/\s+/g, " ")
+        .toLowerCase()
+        .replace(/[.,!?;:]+$/g, "");
+}
+
+/* ============================================================
+   IELTS BAND
+============================================================ */
 
 function calculateIELTSBand(score) {
+    const bands = {
+        40: 9.0,
+        39: 9.0,
+        38: 8.5,
+        37: 8.5,
+        36: 8.0,
+        35: 8.0,
+        34: 7.5,
+        33: 7.5,
+        32: 7.5,
+        31: 7.0,
+        30: 7.0,
+        29: 6.5,
+        28: 6.5,
+        27: 6.5,
+        26: 6.0,
+        25: 6.0,
+        24: 6.0,
+        23: 6.0,
+        22: 5.5,
+        21: 5.5,
+        20: 5.5,
+        19: 5.5,
+        18: 5.0,
+        17: 5.0,
+        16: 5.0,
+        15: 4.5,
+        14: 4.5,
+        13: 4.5,
+        12: 4.0,
+        11: 4.0,
+        10: 4.0,
+        9: 3.5,
+        8: 3.5,
+        7: 3.0,
+        6: 3.0,
+        5: 2.5,
+        4: 2.5,
+        3: 2.0,
+        2: 1.5,
+        1: 1.0,
+        0: 0.0
+    };
 
-    if (score >= 39) return 9.0;
-    if (score >= 37) return 8.5;
-    if (score >= 35) return 8.0;
-    if (score >= 33) return 7.5;
-    if (score >= 30) return 7.0;
-    if (score >= 27) return 6.5;
-    if (score >= 23) return 6.0;
-    if (score >= 19) return 5.5;
-    if (score >= 15) return 5.0;
-    if (score >= 13) return 4.5;
-    if (score >= 10) return 4.0;
-    if (score >= 8) return 3.5;
-    if (score >= 6) return 3.0;
-    if (score >= 4) return 2.5;
-    if (score >= 2) return 2.0;
-    if (score === 1) return 1.0;
+    if (
+        Object.prototype.hasOwnProperty.call(
+            bands,
+            score
+        )
+    ) {
+        return bands[score];
+    }
 
-    return 0;
+    const percentage =
+        score / 40;
+
+    if (percentage >= 0.9)
+        return 9.0;
+
+    if (percentage >= 0.85)
+        return 8.5;
+
+    if (percentage >= 0.8)
+        return 8.0;
+
+    if (percentage >= 0.75)
+        return 7.5;
+
+    if (percentage >= 0.7)
+        return 7.0;
+
+    if (percentage >= 0.65)
+        return 6.5;
+
+    if (percentage >= 0.6)
+        return 6.0;
+
+    if (percentage >= 0.55)
+        return 5.5;
+
+    if (percentage >= 0.45)
+        return 5.0;
+
+    return 4.5;
 }
 
-/* =========================================================
+/* ============================================================
    RESULT
-========================================================= */
+============================================================ */
 
 function renderResult() {
-
     showScreen("resultScreen");
+
+    if (!scoreData) {
+        return;
+    }
+
+    const title =
+        currentTest?.title ||
+        `IELTS Reading Test ${currentTestNumber}`;
 
     const total =
         scoreData.totalQuestions;
@@ -2677,25 +3213,15 @@ function renderResult() {
     const accuracy =
         answered
             ? Math.round(
-                score /
-                answered *
-                100
-            )
-            : 0;
-
-    const percentage =
-        total
-            ? Math.round(
-                score /
-                total *
-                100
-            )
+                  (score /
+                      answered) *
+                      100
+              )
             : 0;
 
     setText(
         "resultTestTitle",
-        currentTest.title ||
-        `IELTS Reading Test ${currentTestNumber}`
+        title
     );
 
     setText(
@@ -2740,1137 +3266,1345 @@ function renderResult() {
         `${accuracy}%`
     );
 
-    buildResultFallback(
+    renderPartScores();
+
+    renderIncorrectAnswers();
+
+    buildReadingResultScreen(
+        title,
         score,
         total,
         answered,
         incorrect,
         unanswered,
-        accuracy,
-        percentage
+        accuracy
     );
+
+    ensurePrintButton();
 }
 
-/* =========================================================
-   RESULT FALLBACK / REPORT
-========================================================= */
+/* ============================================================
+   RESULT PAGE
+============================================================ */
 
-function buildResultFallback(
+function buildReadingResultScreen(
+    title,
     score,
     total,
     answered,
     incorrect,
     unanswered,
-    accuracy,
-    percentage
+    accuracy
 ) {
+    const existing =
+        document.getElementById(
+            "readingResultReport"
+        );
 
-    const screen =
-        $("resultScreen");
-
-    if (!screen) return;
-
-    let report =
-        $("readingResultReport");
-
-    if (!report) {
-
-        report =
-            document.createElement("div");
-
-        report.id =
-            "readingResultReport";
-
-        screen.appendChild(report);
+    if (existing) {
+        existing.remove();
     }
 
-    report.innerHTML = `
-        <div class="results-page">
+    const resultScreen =
+        document.getElementById(
+            "resultScreen"
+        );
 
-            <div class="results-heading">
-                <div class="results-kicker">
-                    TEST COMPLETE
+    if (!resultScreen) {
+        return;
+    }
+
+    const report =
+        document.createElement("div");
+
+    report.id =
+        "readingResultReport";
+
+    report.className =
+        "results-page";
+
+    report.innerHTML = `
+        <div class="results-heading">
+            <div class="results-kicker">
+                TEST COMPLETE
+            </div>
+
+            <h1>Your Reading Result</h1>
+
+            <p>
+                ${escapeHTML(title)}
+            </p>
+
+            <button
+                type="button"
+                id="readingPrintButton"
+                class="print-result-button"
+            >
+                Print / Save PDF
+            </button>
+        </div>
+
+        <div class="result-hero">
+            <div class="score-ring">
+                <strong>
+                    ${score}/${total}
+                </strong>
+                <span>Correct</span>
+            </div>
+
+            <div class="hero-copy">
+                <div class="status-pill">
+                    Completed
                 </div>
 
-                <h1>
-                    Your Reading Result
-                </h1>
+                <h2>
+                    IELTS Band ${Number(
+                        scoreData.band
+                    ).toFixed(1)}
+                </h2>
 
                 <p>
-                    ${
-                        escapeHTML(
-                            currentTest.title ||
-                            `IELTS Reading Test ${currentTestNumber}`
-                        )
-                    }
+                    You answered
+                    ${answered}
+                    of
+                    ${total}
+                    questions.
                 </p>
+            </div>
+        </div>
 
-                <button
-                    type="button"
-                    id="generatedPrintButton"
-                    class="print-result-button"
-                >
-                    Print / Save PDF
-                </button>
+        <div class="result-summary">
+            <div>
+                <strong>${score}</strong>
+                <span>Correct</span>
             </div>
 
-            <div class="result-hero">
-
-                <div class="score-ring">
-                    <strong>
-                        ${score}/${total}
-                    </strong>
-                    <span>
-                        ${percentage}%
-                    </span>
-                </div>
-
-                <div class="hero-copy">
-
-                    <div class="status-pill">
-                        ${score >= total * .7
-                            ? "Strong Result"
-                            : "Keep Practising"}
-                    </div>
-
-                    <h2>
-                        Estimated IELTS Band
-                        ${Number(scoreData.band).toFixed(1)}
-                    </h2>
-
-                    <p>
-                        You answered ${answered}
-                        of ${total} questions.
-                    </p>
-
-                </div>
-
+            <div>
+                <strong>${incorrect}</strong>
+                <span>Incorrect</span>
             </div>
 
-            <div class="result-summary">
-
-                ${resultStat(
-                    "Correct",
-                    score
-                )}
-
-                ${resultStat(
-                    "Incorrect",
-                    incorrect
-                )}
-
-                ${resultStat(
-                    "Unanswered",
-                    unanswered
-                )}
-
-                ${resultStat(
-                    "Accuracy",
-                    `${accuracy}%`
-                )}
-
+            <div>
+                <strong>${unanswered}</strong>
+                <span>Unanswered</span>
             </div>
 
-            <section class="result-section">
+            <div>
+                <strong>${accuracy}%</strong>
+                <span>Accuracy</span>
+            </div>
+        </div>
 
-                <h2>
-                    Part-by-Part Score
-                </h2>
+        <div class="result-section">
+            <h2>Part-by-Part Score</h2>
 
-                <div class="part-score-list">
+            <div
+                id="readingPartGrid"
+                class="result-part-grid"
+            ></div>
+        </div>
 
-                    ${
-                        scoreData.partScores
-                            .map(
-                                (partScore, index) => `
-                                    <div class="part-score-row">
+        <div class="result-section">
+            <h2>Question Review</h2>
 
-                                        <span>
-                                            Part ${index + 1}
-                                        </span>
-
-                                        <strong>
-                                            ${partScore}
-                                            /
-                                            ${scoreData.partTotals[index]}
-                                        </strong>
-
-                                    </div>
-                                `
-                            )
-                            .join("")
-                    }
-
-                </div>
-
-            </section>
-
-            <section class="result-section">
-
-                <h2>
-                    Question Review
-                </h2>
-
-                <div class="review-grid">
-
-                    ${
-                        getAllReviewQuestions()
-                            .map(
-                                item =>
-                                    renderReviewItem(
-                                        item
-                                    )
-                            )
-                            .join("")
-                    }
-
-                </div>
-
-            </section>
-
-            <div class="result-actions">
-
-                <button
-                    type="button"
-                    id="generatedRestartButton"
-                >
-                    Start Again
-                </button>
-
-                <button
-                    type="button"
-                    id="generatedPrintButton2"
-                >
-                    Print / Save PDF
-                </button>
-
+            <div class="review-legend">
+                <span>✓ Correct</span>
+                <span>✕ Incorrect</span>
+                <span>— Unanswered</span>
             </div>
 
+            <div
+                id="readingReviewGrid"
+                class="review-grid"
+            ></div>
+        </div>
+
+        <div class="result-actions">
+            <button
+                type="button"
+                id="resultStartAgain"
+            >
+                Start Again
+            </button>
+
+            <button
+                type="button"
+                id="resultDashboard"
+            >
+                Dashboard
+            </button>
         </div>
     `;
 
-    $("generatedPrintButton")
-        ?.addEventListener(
+    resultScreen.appendChild(
+        report
+    );
+
+    populateReadingPartGrid();
+
+    populateReadingReviewGrid();
+
+    const printButton =
+        document.getElementById(
+            "readingPrintButton"
+        );
+
+    if (printButton) {
+        printButton.addEventListener(
             "click",
             printScorePDF
         );
+    }
 
-    $("generatedPrintButton2")
-        ?.addEventListener(
-            "click",
-            printScorePDF
+    const startAgain =
+        document.getElementById(
+            "resultStartAgain"
         );
 
-    $("generatedRestartButton")
-        ?.addEventListener(
+    if (startAgain) {
+        startAgain.addEventListener(
             "click",
-            restartCurrentTest
+            startAgainFromResult
         );
+    }
+
+    const dashboard =
+        document.getElementById(
+            "resultDashboard"
+        );
+
+    if (dashboard) {
+        dashboard.addEventListener(
+            "click",
+            showDashboard
+        );
+    }
 }
 
-function resultStat(label, value) {
+function startAgainFromResult() {
+    clearCurrentTestAnswers();
 
-    return `
-        <div class="result-stat">
+    submittedAnswers = {};
 
-            <span>
-                ${escapeHTML(label)}
-            </span>
+    scoreData = null;
 
-            <strong>
-                ${escapeHTML(value)}
-            </strong>
+    currentPartIndex = 0;
 
-        </div>
-    `;
+    showTestIntroduction();
 }
 
-/* =========================================================
-   REVIEW QUESTIONS
-========================================================= */
+/* ============================================================
+   PART RESULTS
+============================================================ */
 
-function getAllReviewQuestions() {
+function renderPartScores() {
+    populateReadingPartGrid();
+}
 
+function populateReadingPartGrid() {
+    const grid =
+        document.getElementById(
+            "readingPartGrid"
+        );
+
+    if (!grid || !scoreData) {
+        return;
+    }
+
+    grid.innerHTML =
+        scoreData.partScores
+            .map(
+                function (
+                    score,
+                    index
+                ) {
+                    const total =
+                        scoreData
+                            .partTotals[
+                            index
+                        ];
+
+                    const percent =
+                        total
+                            ? Math.round(
+                                  (score /
+                                      total) *
+                                      100
+                              )
+                            : 0;
+
+                    return `
+                        <div class="result-part-card">
+                            <div>
+                                Part ${
+                                    index +
+                                    1
+                                }
+                            </div>
+
+                            <strong>
+                                ${score}/${total}
+                            </strong>
+
+                            <span>
+                                ${percent}%
+                            </span>
+                        </div>
+                    `;
+                }
+            )
+            .join("");
+}
+
+/* ============================================================
+   QUESTION REVIEW
+============================================================ */
+
+function getAllQuestionObjects() {
     const result = [];
 
-    (currentTest.parts || [])
-        .forEach(part => {
+    if (!currentTest) {
+        return result;
+    }
 
-            (part.questionGroups || [])
-                .forEach(group => {
+    currentTest.parts.forEach(
+        function (part) {
+            (
+                part.questionGroups ||
+                []
+            ).forEach(
+                function (group) {
+                    (
+                        group.questions ||
+                        []
+                    ).forEach(
+                        function (
+                            question
+                        ) {
+                            result.push({
+                                ...question,
+                                partNumber:
+                                    part.partNumber ||
+                                    currentTest.parts.indexOf(
+                                        part
+                                    ) +
+                                        1
+                            });
+                        }
+                    );
 
-                    const questions = [
-                        ...(group.questions || []),
-                        ...(group.blanks || [])
-                    ];
-
-                    questions.forEach(question => {
-
-                        result.push({
-                            number:
-                                question.number,
-
-                            text:
-                                question.text || "",
-
-                            given:
-                                submittedAnswers[
-                                    question.number
-                                ],
-
-                            correct:
-                                question.answer
-                        });
-                    });
-                });
-        });
+                    (
+                        group.blanks ||
+                        []
+                    ).forEach(
+                        function (blank) {
+                            result.push({
+                                ...blank,
+                                partNumber:
+                                    part.partNumber ||
+                                    currentTest.parts.indexOf(
+                                        part
+                                    ) +
+                                        1
+                            });
+                        }
+                    );
+                }
+            );
+        }
+    );
 
     return result.sort(
-        (a, b) =>
-            Number(a.number) -
-            Number(b.number)
+        function (a, b) {
+            return (
+                Number(a.number) -
+                Number(b.number)
+            );
+        }
     );
 }
 
-function renderReviewItem(item) {
-
-    const correct =
-        answersMatch(
-            item.given,
-            item.correct
-        );
-
-    const answered =
-        isAnswered(item.given);
-
-    const status =
-        correct
-            ? "correct"
-            : answered
-                ? "incorrect"
-                : "unanswered";
-
-    return `
-        <div class="review-item ${status}">
-
-            <div class="review-number">
-                ${escapeHTML(item.number)}
-            </div>
-
-            <div class="review-content">
-
-                <div class="review-question">
-                    ${formatQuestionText(item.text)}
-                </div>
-
-                <div class="review-answer">
-
-                    <strong>
-                        Your answer:
-                    </strong>
-
-                    <span>
-                        ${
-                            answered
-                                ? escapeHTML(
-                                    formatAnswer(
-                                        item.given
-                                    )
-                                )
-                                : "(No answer)"
-                        }
-                    </span>
-
-                </div>
-
-                <div class="review-answer">
-
-                    <strong>
-                        Correct answer:
-                    </strong>
-
-                    <span>
-                        ${escapeHTML(
-                            formatAnswer(
-                                item.correct
-                            )
-                        )}
-                    </span>
-
-                </div>
-
-            </div>
-
-        </div>
-    `;
+function getAllReviewQuestions() {
+    return getAllQuestionObjects();
 }
 
-function formatAnswer(value) {
+function countAnsweredAnswers(
+    answerSet
+) {
+    return getAllQuestionObjects().filter(
+        function (question) {
+            return isQuestionAnsweredFromSet(
+                question.number,
+                answerSet
+            );
+        }
+    ).length;
+}
+
+function isQuestionAnsweredFromSet(
+    number,
+    answerSet
+) {
+    const value =
+        answerSet[
+            String(number)
+        ];
 
     if (
         value === undefined ||
-        value === null ||
-        value === ""
+        value === null
     ) {
-        return "(No answer)";
+        return false;
+    }
+
+    if (Array.isArray(value)) {
+        return value.length > 0;
+    }
+
+    return (
+        String(value).trim() !== ""
+    );
+}
+
+function renderIncorrectAnswers() {
+    populateReadingReviewGrid();
+}
+
+function populateReadingReviewGrid() {
+    const grid =
+        document.getElementById(
+            "readingReviewGrid"
+        );
+
+    if (!grid) {
+        return;
+    }
+
+    const questions =
+        getAllReviewQuestions();
+
+    grid.innerHTML =
+        questions
+            .map(function (question) {
+                const number =
+                    question.number;
+
+                const given =
+                    submittedAnswers[
+                        String(number)
+                    ];
+
+                const correct =
+                    question.answer ??
+                    question.correctAnswer ??
+                    question.correct;
+
+                const answered =
+                    isQuestionAnsweredFromSet(
+                        number,
+                        submittedAnswers
+                    );
+
+                const isCorrect =
+                    answered &&
+                    answersMatch(
+                        given,
+                        correct
+                    );
+
+                let status =
+                    "unanswered";
+
+                let symbol = "—";
+
+                if (answered) {
+                    if (isCorrect) {
+                        status = "correct";
+                        symbol = "✓";
+                    } else {
+                        status = "incorrect";
+                        symbol = "✕";
+                    }
+                }
+
+                return `
+                    <div class="
+                        review-item
+                        ${status}
+                    ">
+                        <div class="review-number">
+                            ${number}
+                        </div>
+
+                        <div class="review-symbol">
+                            ${symbol}
+                        </div>
+
+                        <div class="review-content">
+                            <strong>
+                                ${escapeHTML(
+                                    getQuestionText(
+                                        question
+                                    )
+                                )}
+                            </strong>
+
+                            <div>
+                                <span>
+                                    Your answer:
+                                </span>
+                                ${escapeHTML(
+                                    formatReviewAnswer(
+                                        given
+                                    )
+                                )}
+                            </div>
+
+                            <div>
+                                <span>
+                                    Correct answer:
+                                </span>
+                                ${escapeHTML(
+                                    formatCorrectAnswer(
+                                        correct
+                                    )
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            })
+            .join("");
+}
+
+function getReviewQuestionText(
+    question
+) {
+    return getQuestionText(
+        question
+    );
+}
+
+function formatReviewAnswer(
+    value
+) {
+    if (
+        value === undefined ||
+        value === null ||
+        String(value).trim() === ""
+    ) {
+        return "Not answered";
     }
 
     if (Array.isArray(value)) {
         return value.join(", ");
     }
 
-    if (
-        typeof value === "object"
-    ) {
+    return String(value);
+}
 
-        return (
-            value.letter ??
-            value.text ??
-            value.value ??
-            JSON.stringify(value)
-        );
+function formatCorrectAnswer(
+    value
+) {
+    if (
+        value === undefined ||
+        value === null
+    ) {
+        return "Not available";
+    }
+
+    if (Array.isArray(value)) {
+        return value.join(", ");
     }
 
     return String(value);
 }
 
-/* =========================================================
-   RESTART / DASHBOARD
-========================================================= */
-
-function restartCurrentTest() {
-
-    if (!currentTest) return;
-
-    clearSavedAnswers();
-
-    studentAnswers = {};
-
-    submittedAnswers = {};
-
-    testSubmitted = false;
-
-    currentPartIndex = 0;
-
-    testStarted = false;
-
-    showTestIntroduction();
-}
-
-function backToDashboard() {
-
-    stopTimer();
-
-    currentTest = null;
-
-    currentTestNumber = null;
-
-    studentAnswers = {};
-
-    submittedAnswers = {};
-
-    testSubmitted = false;
-
-    testStarted = false;
-
-    renderTestCards();
-
-    showScreen("dashboardScreen");
-}
-
-/* =========================================================
+/* ============================================================
    PRINT / SAVE PDF
-========================================================= */
+============================================================ */
+
+function ensurePrintButton() {
+    const button =
+        document.getElementById(
+            "printScoreButton"
+        );
+
+    if (button) {
+        button.onclick =
+            printScorePDF;
+    }
+}
 
 function printScorePDF() {
+    if (!scoreData) {
+        return;
+    }
 
-    if (!scoreData) return;
+    const title =
+        currentTest?.title ||
+        `IELTS Reading Test ${currentTestNumber}`;
 
-    const total =
-        scoreData.totalQuestions;
-
-    const score =
-        scoreData.totalScore;
-
-    const answered =
-        countAnsweredAnswers(
-            submittedAnswers
-        );
-
-    const incorrect =
-        Math.max(
-            0,
-            answered - score
-        );
-
-    const unanswered =
-        Math.max(
-            0,
-            total - answered
-        );
-
-    const accuracy =
-        answered
-            ? Math.round(
-                score /
-                answered *
-                100
-            )
-            : 0;
-
-    const review =
+    const questions =
         getAllReviewQuestions();
 
-    const html = `
-<!DOCTYPE html>
-
-<html>
-
-<head>
-
-<meta charset="UTF-8">
-
-<title>
-IELTS Reading Result
-</title>
-
-<style>
-
-* {
-    box-sizing: border-box;
-}
-
-body {
-    font-family:
-        Arial,
-        Helvetica,
-        sans-serif;
-
-    margin: 0;
-
-    padding: 35px;
-
-    color: #222;
-
-    background: #fff;
-}
-
-h1 {
-    margin: 0 0 8px;
-}
-
-h2 {
-    margin-top: 30px;
-}
-
-.header {
-    border-bottom:
-        2px solid #222;
-
-    padding-bottom: 20px;
-}
-
-.kicker {
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 2px;
-}
-
-.subtitle {
-    color: #666;
-}
-
-.score {
-    margin-top: 25px;
-    padding: 25px;
-    border: 1px solid #ddd;
-    border-radius: 15px;
-}
-
-.score-number {
-    font-size: 42px;
-    font-weight: bold;
-}
-
-.band {
-    font-size: 24px;
-    margin-top: 10px;
-}
-
-.stats {
-    display: grid;
-    grid-template-columns:
-        repeat(4, 1fr);
-
-    gap: 12px;
-
-    margin-top: 20px;
-}
-
-.stat {
-    border:
-        1px solid #ddd;
-
-    border-radius:
-        10px;
-
-    padding:
-        15px;
-}
-
-.stat strong {
-    display: block;
-    font-size: 22px;
-    margin-top: 5px;
-}
-
-.part {
-    display: flex;
-    justify-content: space-between;
-    border-bottom:
-        1px solid #ddd;
-    padding: 10px 0;
-}
-
-.review {
-    border:
-        1px solid #ddd;
-
-    border-radius:
-        10px;
-
-    padding:
-        15px;
-
-    margin:
-        10px 0;
-
-    page-break-inside:
-        avoid;
-}
-
-.review.correct {
-    border-left:
-        5px solid #222;
-}
-
-.review.incorrect {
-    border-left:
-        5px solid #777;
-}
-
-.review.unanswered {
-    border-left:
-        5px solid #bbb;
-}
-
-.answer {
-    margin-top: 8px;
-}
-
-@media print {
-
-    body {
-        padding: 15px;
-    }
-
-    button {
-        display: none !important;
-    }
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="header">
-
-    <div class="kicker">
-        IELTS READING
-    </div>
-
-    <h1>
-        Test Result
-    </h1>
-
-    <div class="subtitle">
-        ${escapeHTML(
-            currentTest.title ||
-            `IELTS Reading Test ${currentTestNumber}`
-        )}
-    </div>
-
-</div>
-
-<div class="score">
-
-    <div class="score-number">
-        ${score} / ${total}
-    </div>
-
-    <div>
-        Accuracy: ${accuracy}%
-    </div>
-
-    <div class="band">
-        Estimated IELTS Band:
-        <strong>
-            ${Number(scoreData.band).toFixed(1)}
-        </strong>
-    </div>
-
-    <div>
-        Time used:
-        ${escapeHTML(scoreData.timeUsed)}
-    </div>
-
-</div>
-
-<div class="stats">
-
-    <div class="stat">
-        Correct
-        <strong>${score}</strong>
-    </div>
-
-    <div class="stat">
-        Incorrect
-        <strong>${incorrect}</strong>
-    </div>
-
-    <div class="stat">
-        Unanswered
-        <strong>${unanswered}</strong>
-    </div>
-
-    <div class="stat">
-        Accuracy
-        <strong>${accuracy}%</strong>
-    </div>
-
-</div>
-
-<h2>
-    Part Scores
-</h2>
-
-${
-    scoreData.partScores
-        .map(
-            (value, index) => `
-                <div class="part">
-                    <span>
-                        Part ${index + 1}
-                    </span>
-                    <strong>
-                        ${value}
-                        /
-                        ${scoreData.partTotals[index]}
-                    </strong>
-                </div>
-            `
-        )
-        .join("")
-}
-
-<h2>
-    Question Review
-</h2>
-
-${
-    review
-        .map(item => {
-
-            const correct =
-                answersMatch(
-                    item.given,
-                    item.correct
-                );
-
-            const answered =
-                isAnswered(
-                    item.given
-                );
-
-            const status =
-                correct
-                    ? "correct"
-                    : answered
-                        ? "incorrect"
-                        : "unanswered";
-
-            return `
-                <div class="review ${status}">
-
-                    <strong>
-                        Question ${escapeHTML(item.number)}
-                    </strong>
-
-                    <p>
-                        ${formatQuestionText(item.text)}
-                    </p>
-
-                    <div class="answer">
-                        <strong>
-                            Your answer:
-                        </strong>
-                        ${
-                            answered
-                                ? escapeHTML(
-                                    formatAnswer(
-                                        item.given
-                                    )
+    const reviewHTML =
+        questions
+            .map(function (question) {
+                const number =
+                    question.number;
+
+                const given =
+                    submittedAnswers[
+                        String(number)
+                    ];
+
+                const correct =
+                    question.answer ??
+                    question.correctAnswer ??
+                    question.correct;
+
+                const answered =
+                    isQuestionAnsweredFromSet(
+                        number,
+                        submittedAnswers
+                    );
+
+                const isCorrect =
+                    answered &&
+                    answersMatch(
+                        given,
+                        correct
+                    );
+
+                return `
+                    <tr>
+                        <td>${number}</td>
+
+                        <td>
+                            ${escapeHTML(
+                                getQuestionText(
+                                    question
                                 )
-                                : "(No answer)"
-                        }
-                    </div>
+                            )}
+                        </td>
 
-                    <div class="answer">
-                        <strong>
-                            Correct answer:
-                        </strong>
-                        ${escapeHTML(
-                            formatAnswer(
-                                item.correct
-                            )
-                        )}
-                    </div>
+                        <td class="${
+                            isCorrect
+                                ? "correct"
+                                : "wrong"
+                        }">
+                            ${escapeHTML(
+                                formatReviewAnswer(
+                                    given
+                                )
+                            )}
+                        </td>
 
-                </div>
-            `;
+                        <td>
+                            ${escapeHTML(
+                                formatCorrectAnswer(
+                                    correct
+                                )
+                            )}
+                        </td>
+                    </tr>
+                `;
+            })
+            .join("");
 
-        })
-        .join("")
-}
+    const partHTML =
+        scoreData.partScores
+            .map(
+                function (
+                    score,
+                    index
+                ) {
+                    return `
+                        <tr>
+                            <td>
+                                Part ${
+                                    index +
+                                    1
+                                }
+                            </td>
 
-</body>
+                            <td>
+                                ${score}
+                                /
+                                ${
+                                    scoreData
+                                        .partTotals[
+                                        index
+                                    ]
+                                }
+                            </td>
+                        </tr>
+                    `;
+                }
+            )
+            .join("");
 
-</html>
-`;
-
-    const printWindow =
+    const win =
         window.open(
             "",
             "_blank",
             "width=1000,height=800"
         );
 
-    if (!printWindow) {
-
+    if (!win) {
         showToast(
             "Please allow pop-ups to print the result."
         );
-
         return;
     }
 
-    printWindow.document.open();
+    win.document.open();
 
-    printWindow.document.write(
-        html
+    win.document.write(`
+        <!DOCTYPE html>
+
+        <html>
+        <head>
+
+            <meta charset="UTF-8">
+
+            <title>
+                IELTS Reading Result
+            </title>
+
+            <style>
+
+                body {
+                    font-family:
+                        Arial,
+                        Helvetica,
+                        sans-serif;
+
+                    margin: 40px;
+
+                    color: #222;
+                }
+
+                h1 {
+                    margin-bottom: 5px;
+                }
+
+                h2 {
+                    margin-top: 30px;
+                }
+
+                .subtitle {
+                    color: #666;
+                    margin-bottom: 30px;
+                }
+
+                .score {
+                    font-size: 42px;
+                    font-weight: 700;
+                }
+
+                .band {
+                    font-size: 28px;
+                    margin-top: 10px;
+                }
+
+                .summary {
+                    display: grid;
+                    grid-template-columns:
+                        repeat(
+                            4,
+                            1fr
+                        );
+
+                    gap: 12px;
+
+                    margin:
+                        30px 0;
+                }
+
+                .summary-box {
+                    border:
+                        1px solid
+                        #ddd;
+
+                    padding: 15px;
+
+                    text-align:
+                        center;
+                }
+
+                .summary-box strong {
+                    display: block;
+
+                    font-size: 24px;
+                }
+
+                table {
+                    width: 100%;
+
+                    border-collapse:
+                        collapse;
+
+                    margin-top: 15px;
+                }
+
+                th,
+                td {
+                    border:
+                        1px solid
+                        #ddd;
+
+                    padding: 9px;
+
+                    text-align:
+                        left;
+
+                    vertical-align:
+                        top;
+                }
+
+                th {
+                    background:
+                        #f2f2f2;
+                }
+
+                .correct {
+                    font-weight: 700;
+                }
+
+                .wrong {
+                    font-weight: 700;
+                }
+
+                @media print {
+
+                    body {
+                        margin: 15mm;
+                    }
+
+                }
+
+            </style>
+
+        </head>
+
+        <body>
+
+            <h1>
+                IELTS Reading Result
+            </h1>
+
+            <div class="subtitle">
+                ${escapeHTML(title)}
+            </div>
+
+            <div class="score">
+                ${scoreData.totalScore}
+                /
+                ${scoreData.totalQuestions}
+            </div>
+
+            <div class="band">
+                Estimated IELTS Band:
+                ${Number(
+                    scoreData.band
+                ).toFixed(1)}
+            </div>
+
+            <div class="summary">
+
+                <div class="summary-box">
+                    <strong>
+                        ${scoreData.totalScore}
+                    </strong>
+                    Correct
+                </div>
+
+                <div class="summary-box">
+                    <strong>
+                        ${
+                            scoreData
+                                .totalQuestions -
+                            countAnsweredAnswers(
+                                submittedAnswers
+                            )
+                        }
+                    </strong>
+                    Unanswered
+                </div>
+
+                <div class="summary-box">
+                    <strong>
+                        ${
+                            countAnsweredAnswers(
+                                submittedAnswers
+                            ) -
+                            scoreData.totalScore
+                        }
+                    </strong>
+                    Incorrect
+                </div>
+
+                <div class="summary-box">
+                    <strong>
+                        ${scoreData.timeUsed}
+                    </strong>
+                    Time Used
+                </div>
+
+            </div>
+
+            <h2>
+                Part Scores
+            </h2>
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>Part</th>
+                        <th>Score</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    ${partHTML}
+                </tbody>
+
+            </table>
+
+            <h2>
+                Question Review
+            </h2>
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>No.</th>
+                        <th>Question</th>
+                        <th>Your Answer</th>
+                        <th>Correct Answer</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    ${reviewHTML}
+                </tbody>
+
+            </table>
+
+            <script>
+
+                window.onload =
+                    function () {
+
+                        setTimeout(
+                            function () {
+
+                                window.focus();
+
+                                window.print();
+
+                            },
+                            500
+                        );
+
+                    };
+
+            <\/script>
+
+        </body>
+        </html>
+    `);
+
+    win.document.close();
+}
+
+/* ============================================================
+   LOADING
+============================================================ */
+
+function setLoading(
+    loading,
+    message
+) {
+    const ids = [
+        "loadingOverlay",
+        "loadingScreen"
+    ];
+
+    for (const id of ids) {
+        const element =
+            document.getElementById(id);
+
+        if (element) {
+            element.style.display =
+                loading
+                    ? "flex"
+                    : "none";
+
+            const text =
+                element.querySelector(
+                    ".loading-text"
+                );
+
+            if (text && message) {
+                text.textContent =
+                    message;
+            }
+
+            return;
+        }
+    }
+}
+
+/* ============================================================
+   TOAST
+============================================================ */
+
+function showToast(message) {
+    let toast =
+        document.getElementById(
+            "appToast"
+        );
+
+    if (!toast) {
+        toast =
+            document.createElement(
+                "div"
+            );
+
+        toast.id =
+            "appToast";
+
+        toast.style.cssText = `
+            position:fixed;
+            left:50%;
+            bottom:25px;
+            transform:translateX(-50%);
+            z-index:999999;
+            background:#222;
+            color:#fff;
+            padding:12px 18px;
+            border-radius:10px;
+            font-family:Arial,sans-serif;
+            font-size:14px;
+            box-shadow:0 8px 25px rgba(0,0,0,.2);
+        `;
+
+        document.body.appendChild(
+            toast
+        );
+    }
+
+    toast.textContent =
+        message;
+
+    toast.style.display =
+        "block";
+
+    clearTimeout(
+        toast._timer
     );
 
-    printWindow.document.close();
-
-    setTimeout(() => {
-
-        printWindow.focus();
-
-        printWindow.print();
-
-    }, 500);
+    toast._timer =
+        setTimeout(
+            function () {
+                toast.style.display =
+                    "none";
+            },
+            2500
+        );
 }
 
-/* =========================================================
-   PANEL SCROLL
-========================================================= */
+/* ============================================================
+   GENERAL HELPERS
+============================================================ */
 
-function scrollPanelsTop() {
+function setText(
+    id,
+    value
+) {
+    const element =
+        document.getElementById(id);
 
-    [
-        "passagePanel",
-        "questionPanel",
-        "passageContent",
-        "questionsContent"
-    ]
-    .forEach(id => {
-
-        const el = $(id);
-
-        if (el) {
-            el.scrollTop = 0;
-        }
-    });
+    if (element) {
+        element.textContent =
+            value ?? "";
+    }
 }
 
-/* =========================================================
-   CSS FIXES
-   These are injected so the JS works even if the existing
-   CSS is missing some drag/drop/select styles.
-========================================================= */
+function escapeHTML(value) {
+    return String(
+        value ?? ""
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+}
 
-function injectStyles() {
+function escapeAttribute(value) {
+    return escapeHTML(value);
+}
 
-    if ($("appJsFixStyles")) return;
+function escapeRegExp(value) {
+    return String(value)
+        .replace(
+            /[.*+?^${}()|[\]\\]/g,
+            "\\$&"
+        );
+}
+
+/* ============================================================
+   DRAG / RESULT STYLES
+============================================================ */
+
+function injectDragDropStyles() {
+    if (
+        document.getElementById(
+            "readingAppStyles"
+        )
+    ) {
+        return;
+    }
 
     const style =
-        document.createElement("style");
+        document.createElement(
+            "style"
+        );
 
     style.id =
-        "appJsFixStyles";
+        "readingAppStyles";
 
     style.textContent = `
 
-        .question-group {
-            margin-bottom: 30px;
+        .screen.active {
+            display: block !important;
         }
 
-        .group-heading {
-            margin-bottom: 18px;
-        }
-
-        .question-card {
-            display: flex;
-            gap: 14px;
-            margin: 12px 0;
-            padding: 15px;
-            border-radius: 10px;
-        }
-
-        .question-number {
-            min-width: 34px;
-            height: 34px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 50%;
-            font-weight: 700;
-            background: #383838;
-            color: white;
-        }
-
-        .question-body {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .question-text {
-            margin-bottom: 10px;
-            line-height: 1.6;
-        }
-
-        .question-control {
-            width: 100%;
-        }
-
-        .question-select,
-        .answer-input {
-            width: 100%;
-            max-width: 420px;
-            min-height: 42px;
-            padding: 9px 12px;
-            border: 1px solid #bbb;
-            border-radius: 8px;
-            background: white;
-            font-size: 15px;
-        }
-
-        .multiple-option {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin: 8px 0;
-            cursor: pointer;
-        }
-
-        .drag-option-bank {
-            margin: 15px 0;
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px solid #ddd;
-        }
-
-        .drag-bank-title {
-            font-weight: 700;
-            margin-bottom: 12px;
-        }
-
-        .drag-options,
-        .drag-option-bank > div:not(.drag-bank-title) {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-        }
-
-        .drag-option,
-        .summary-drag-word {
+        .drag-option {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            min-height: 40px;
-            padding: 8px 14px;
+            padding: 9px 14px;
+            margin: 5px;
+            border: 1px solid #ccc;
             border-radius: 8px;
-            border: 1px solid #aaa;
-            background: white;
+            background: #fff;
             cursor: grab;
             user-select: none;
         }
 
-        .drag-option:hover,
-        .summary-drag-word:hover,
-        .drag-option.selected,
-        .summary-drag-word.selected {
-            transform: translateY(-1px);
-            border-color: #383838;
+        .drag-option:hover {
+            border-color: #333;
         }
 
-        .drag-option.dragging,
-        .summary-drag-word.dragging {
-            opacity: .45;
+        .drag-option.selected {
+            outline: 3px solid rgba(50,100,255,.2);
+            border-color: #3366ff;
         }
 
-        .drag-question,
-        .summary-blank-row {
-            margin: 14px 0;
+        .drag-option.dragging {
+            opacity: .5;
         }
 
-        .drag-question-text,
-        .summary-blank-text {
-            margin-bottom: 8px;
-            line-height: 1.6;
-        }
-
-        .drag-drop-zone,
-        .summary-drop-zone {
-            min-height: 48px;
-            border: 2px dashed #aaa;
-            border-radius: 8px;
-            padding: 8px 12px;
-            display: flex;
-            align-items: center;
-            cursor: pointer;
+        .word-bank,
+        .matching-features-bank {
+            padding: 15px;
+            margin: 15px 0;
+            border: 1px solid #ddd;
+            border-radius: 12px;
             background: #fafafa;
         }
 
-        .drag-drop-zone.drag-over,
-        .summary-drop-zone.drag-over {
-            border-color: #383838;
-            background: #f0f0f0;
+        .word-bank-title {
+            font-weight: 700;
+            margin-bottom: 8px;
         }
 
-        .drop-placeholder {
-            color: #888;
-        }
-
-        .dropped-answer {
-            display: flex;
+        .drop-zone {
+            display: inline-flex;
             align-items: center;
-            justify-content: space-between;
-            width: 100%;
-            gap: 10px;
-        }
-
-        .remove-dropped-answer {
-            border: 0;
-            background: transparent;
-            cursor: pointer;
-            font-size: 20px;
-            line-height: 1;
-        }
-
-        .question-nav-button {
-            min-width: 34px;
-            min-height: 34px;
+            gap: 5px;
+            min-width: 120px;
+            min-height: 36px;
+            padding: 4px 9px;
             margin: 3px;
-            border: 1px solid #bbb;
-            background: white;
-            border-radius: 7px;
+            border: 2px dashed #aaa;
+            border-radius: 6px;
+            background: #fff;
             cursor: pointer;
         }
 
-        .question-nav-button.answered {
-            background: #383838;
-            color: white;
+        .drop-zone.drag-over {
+            border-color: #333;
+            background: #f2f2f2;
         }
 
-        .question-nav-button.current {
-            outline: 2px solid #d0a557;
+        .drop-zone.filled {
+            border-style: solid;
         }
 
-        .question-highlight {
-            animation: questionHighlight 1s ease;
+        .drop-zone-value {
+            font-weight: 600;
         }
 
-        @keyframes questionHighlight {
-            0% {
-                background: rgba(208,165,87,.25);
-            }
-            100% {
-                background: transparent;
-            }
+        .choice-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+            padding: 7px 0;
+            cursor: pointer;
         }
 
-        .timer-warning {
-            color: #c62828 !important;
+        .choice-option input {
+            margin-top: 4px;
+        }
+
+        .question {
+            margin: 18px 0;
+            padding: 15px;
+            border: 1px solid #e2e2e2;
+            border-radius: 10px;
+        }
+
+        .question-header {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        .question-number {
+            flex: 0 0 auto;
             font-weight: 700;
         }
 
+        .question-text {
+            line-height: 1.6;
+        }
+
+        .question-control {
+            margin-left: 25px;
+        }
+
+        .answer-input,
+        .answer-select {
+            width: min(100%, 350px);
+            padding: 9px 11px;
+            border: 1px solid #bbb;
+            border-radius: 7px;
+            font-size: 15px;
+        }
+
+        .question-nav-item {
+            min-width: 34px;
+            min-height: 34px;
+            margin: 3px;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+            background: #fff;
+            cursor: pointer;
+        }
+
+        .question-nav-item.answered {
+            font-weight: 700;
+            border-color: #222;
+            background: #eee;
+        }
+
+        .vocabulary-word {
+            cursor: pointer;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+        }
+
         .results-page {
-            max-width: 1000px;
+            max-width: 1100px;
             margin: 0 auto;
-            padding: 30px 20px;
+            padding: 30px 20px 60px;
         }
 
         .results-heading {
-            margin-bottom: 25px;
+            text-align: center;
+            margin-bottom: 30px;
         }
 
         .results-kicker {
             font-size: 12px;
-            letter-spacing: 2px;
             font-weight: 700;
+            letter-spacing: 2px;
+            opacity: .6;
+        }
+
+        .results-heading h1 {
+            margin: 8px 0;
+        }
+
+        .print-result-button,
+        .result-actions button {
+            padding: 11px 18px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
         }
 
         .result-hero {
             display: flex;
+            gap: 30px;
             align-items: center;
-            gap: 25px;
             padding: 25px;
-            border-radius: 18px;
             border: 1px solid #ddd;
+            border-radius: 18px;
+            margin-bottom: 20px;
         }
 
         .score-ring {
-            width: 130px;
-            height: 130px;
+            width: 150px;
+            height: 150px;
+            min-width: 150px;
             border-radius: 50%;
-            border: 10px solid #383838;
+            border: 8px solid #333;
             display: flex;
             flex-direction: column;
-            align-items: center;
             justify-content: center;
-            flex-shrink: 0;
+            align-items: center;
         }
 
         .score-ring strong {
-            font-size: 25px;
+            font-size: 30px;
         }
 
         .score-ring span {
             font-size: 13px;
-            color: #777;
         }
 
         .status-pill {
             display: inline-block;
-            padding: 6px 12px;
+            padding: 5px 10px;
             border-radius: 20px;
-            background: #383838;
-            color: white;
+            background: #eee;
             font-size: 12px;
+            font-weight: 700;
         }
 
         .result-summary {
@@ -3880,42 +4614,66 @@ function injectStyles() {
             margin: 20px 0;
         }
 
-        .result-stat {
+        .result-summary > div {
             padding: 18px;
-            border-radius: 12px;
             border: 1px solid #ddd;
+            border-radius: 12px;
+            text-align: center;
         }
 
-        .result-stat span {
+        .result-summary strong {
             display: block;
-            color: #777;
+            font-size: 25px;
+        }
+
+        .result-summary span {
             font-size: 13px;
+            opacity: .7;
         }
 
-        .result-stat strong {
-            display: block;
-            margin-top: 5px;
-            font-size: 24px;
+        .result-section {
+            margin-top: 30px;
         }
 
-        .part-score-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 12px;
-            border-bottom: 1px solid #ddd;
-        }
-
-        .review-grid {
+        .result-part-grid {
             display: grid;
+            grid-template-columns: repeat(3, 1fr);
             gap: 12px;
         }
 
-        .review-item {
-            display: flex;
-            gap: 14px;
-            padding: 15px;
+        .result-part-card {
+            padding: 18px;
             border: 1px solid #ddd;
             border-radius: 12px;
+            text-align: center;
+        }
+
+        .result-part-card strong {
+            display: block;
+            font-size: 25px;
+            margin: 8px;
+        }
+
+        .review-legend {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 12px;
+            font-size: 13px;
+        }
+
+        .review-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .review-item {
+            display: grid;
+            grid-template-columns: 45px 35px 1fr;
+            gap: 10px;
+            padding: 13px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
         }
 
         .review-item.correct {
@@ -3923,107 +4681,133 @@ function injectStyles() {
         }
 
         .review-item.incorrect {
-            border-left: 5px solid #999;
+            border-left: 5px solid #888;
         }
 
         .review-item.unanswered {
             border-left: 5px solid #ccc;
         }
 
-        .review-number {
+        .review-number,
+        .review-symbol {
             font-weight: 700;
-            min-width: 30px;
         }
 
-        .review-answer {
-            margin-top: 7px;
+        .review-content > div {
+            margin-top: 5px;
+            font-size: 14px;
+        }
+
+        .review-content > div span {
+            font-weight: 700;
         }
 
         .result-actions {
             display: flex;
+            justify-content: center;
             gap: 10px;
-            margin-top: 25px;
-        }
-
-        .result-actions button,
-        .print-result-button {
-            padding: 11px 18px;
-            border-radius: 8px;
-            border: 1px solid #333;
-            cursor: pointer;
-            background: #383838;
-            color: white;
-        }
-
-        .vocabulary-word {
-            cursor: pointer;
-            border-bottom: 1px dotted currentColor;
-        }
-
-        #vocabularyPopup {
-            position: fixed;
-            z-index: 99999;
-            max-width: 320px;
-            padding: 18px;
-            border-radius: 12px;
-            background: white;
-            color: #222;
-            box-shadow: 0 10px 40px rgba(0,0,0,.25);
-            border: 1px solid #ddd;
-            right: 20px;
-            bottom: 20px;
-        }
-
-        .vocab-close {
-            float: right;
-            border: 0;
-            background: transparent;
-            font-size: 20px;
-            cursor: pointer;
+            margin-top: 30px;
         }
 
         @media (max-width: 700px) {
 
-            .result-summary {
-                grid-template-columns:
-                    repeat(2, 1fr);
-            }
-
             .result-hero {
                 flex-direction: column;
-                align-items: flex-start;
+                text-align: center;
             }
 
-            .question-card {
-                padding: 10px;
+            .result-summary {
+                grid-template-columns: repeat(2, 1fr);
             }
 
-            .question-number {
-                min-width: 30px;
+            .result-part-grid {
+                grid-template-columns: 1fr;
             }
 
-            .result-actions {
-                flex-direction: column;
+            .review-item {
+                grid-template-columns: 35px 25px 1fr;
             }
 
-            .drag-option,
-            .summary-drag-word {
-                flex: 1 1 auto;
+            .question-control {
+                margin-left: 0;
             }
+
+            .drop-zone {
+                min-width: 100px;
+            }
+
         }
 
-        @media print {
-
-            .print-result-button,
-            .result-actions {
-                display: none !important;
-            }
-        }
     `;
 
-    document.head.appendChild(style);
+    document.head.appendChild(
+        style
+    );
 }
 
-/* =========================================================
-   END
-========================================================= */
+function injectResultStyles() {
+    injectDragDropStyles();
+}
+
+/* ============================================================
+   MODAL CONFIRMATION HANDLER
+============================================================ */
+
+document.addEventListener(
+    "click",
+    function (event) {
+        const modal =
+            document.getElementById(
+                "confirmModal"
+            );
+
+        if (
+            !modal ||
+            modal.style.display ===
+                "none"
+        ) {
+            return;
+        }
+
+        const target =
+            event.target.closest(
+                "#confirmSubmitButton, #confirmExitButton"
+            );
+
+        if (!target) {
+            return;
+        }
+
+        if (
+            target.id ===
+            "confirmSubmitButton"
+        ) {
+            submitTest();
+            return;
+        }
+
+        if (
+            target.id ===
+            "confirmExitButton"
+        ) {
+            closeConfirmModal();
+            showDashboard();
+        }
+    }
+);
+
+/* ============================================================
+   KEYBOARD SUPPORT
+============================================================ */
+
+document.addEventListener(
+    "keydown",
+    function (event) {
+        if (
+            event.key === "Escape"
+        ) {
+            closeVocabularyPopup();
+            closeConfirmModal();
+        }
+    }
+);
