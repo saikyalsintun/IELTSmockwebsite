@@ -1,0 +1,972 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>IELTS Practice Center</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f5f7fb;
+            color: #172033;
+            min-height: 100vh;
+        }
+
+        /* =========================
+           NAVIGATION
+        ========================= */
+
+        nav {
+            width: 100%;
+            height: 72px;
+            background: rgba(255, 255, 255, 0.95);
+            border-bottom: 1px solid #e7eaf0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 7%;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 21px;
+            font-weight: 800;
+            color: #182338;
+        }
+
+        .logo-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            background: #263b80;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 19px;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #657089;
+            font-size: 14px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        .nav-links a:hover {
+            color: #263b80;
+        }
+
+        /* =========================
+           HERO
+        ========================= */
+
+        .hero {
+            min-height: 540px;
+            display: flex;
+            align-items: center;
+            padding: 70px 7%;
+            background:
+                radial-gradient(circle at 80% 20%, rgba(76, 103, 190, 0.14), transparent 30%),
+                radial-gradient(circle at 20% 80%, rgba(70, 91, 170, 0.08), transparent 30%),
+                #f5f7fb;
+        }
+
+        .hero-content {
+            width: 55%;
+            max-width: 720px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 14px;
+            border-radius: 30px;
+            background: #e9edfb;
+            color: #30468e;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 22px;
+        }
+
+        .badge-dot {
+            width: 7px;
+            height: 7px;
+            background: #4058a0;
+            border-radius: 50%;
+        }
+
+        .hero h1 {
+            font-size: clamp(42px, 5vw, 68px);
+            line-height: 1.05;
+            letter-spacing: -2.5px;
+            margin-bottom: 22px;
+            color: #162033;
+        }
+
+        .hero h1 span {
+            color: #4059a2;
+        }
+
+        .hero p {
+            font-size: 18px;
+            line-height: 1.7;
+            color: #69748a;
+            max-width: 620px;
+            margin-bottom: 32px;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+        }
+
+        .primary-btn,
+        .secondary-btn {
+            text-decoration: none;
+            padding: 14px 22px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 700;
+            transition: 0.2s;
+        }
+
+        .primary-btn {
+            background: #263b80;
+            color: white;
+            box-shadow: 0 8px 20px rgba(38, 59, 128, 0.18);
+        }
+
+        .primary-btn:hover {
+            background: #1d2e68;
+            transform: translateY(-2px);
+        }
+
+        .secondary-btn {
+            background: white;
+            color: #34405b;
+            border: 1px solid #dfe3eb;
+        }
+
+        .secondary-btn:hover {
+            border-color: #bbc4d8;
+            transform: translateY(-2px);
+        }
+
+        /* =========================
+           HERO VISUAL
+        ========================= */
+
+        .hero-visual {
+            flex: 1;
+            display: flex;
+            justify-content: flex-end;
+        }
+
+        .test-card {
+            width: 360px;
+            background: white;
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 25px 60px rgba(32, 48, 83, 0.12);
+            border: 1px solid #e8ebf2;
+        }
+
+        .test-card-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .test-card-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #68738a;
+        }
+
+        .live {
+            font-size: 11px;
+            font-weight: 700;
+            color: #31805c;
+            background: #e8f7ef;
+            padding: 6px 10px;
+            border-radius: 20px;
+        }
+
+        .score {
+            background: #f5f7fc;
+            border-radius: 14px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 18px;
+        }
+
+        .score-number {
+            font-size: 52px;
+            font-weight: 800;
+            color: #263b80;
+        }
+
+        .score-label {
+            color: #778198;
+            font-size: 12px;
+        }
+
+        .mini-progress {
+            margin-top: 18px;
+        }
+
+        .mini-progress-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #69748a;
+            margin-bottom: 7px;
+        }
+
+        .progress-bar {
+            height: 7px;
+            background: #edf0f5;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 76%;
+            background: #4059a2;
+            border-radius: 10px;
+        }
+
+        /* =========================
+           SECTION
+        ========================= */
+
+        .section {
+            padding: 85px 7%;
+        }
+
+        .section-header {
+            text-align: center;
+            max-width: 680px;
+            margin: 0 auto 45px;
+        }
+
+        .section-label {
+            color: #4059a2;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 10px;
+        }
+
+        .section-header h2 {
+            font-size: 36px;
+            margin-bottom: 13px;
+            color: #172033;
+        }
+
+        .section-header p {
+            color: #737e93;
+            line-height: 1.7;
+            font-size: 15px;
+        }
+
+        /* =========================
+           TEST CARDS
+        ========================= */
+
+        .tests {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 22px;
+            max-width: 1150px;
+            margin: auto;
+        }
+
+        .test-option {
+            background: white;
+            border: 1px solid #e4e8ef;
+            border-radius: 18px;
+            padding: 28px;
+            transition: 0.25s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .test-option:hover {
+            transform: translateY(-6px);
+            box-shadow: 0 18px 40px rgba(30, 44, 75, 0.10);
+            border-color: #ccd3e3;
+        }
+
+        .test-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            margin-bottom: 22px;
+        }
+
+        .reading-icon {
+            background: #edf0fc;
+        }
+
+        .listening-icon {
+            background: #eef7f4;
+        }
+
+        .listening-icon-2 {
+            background: #f5eefb;
+        }
+
+        .test-option h3 {
+            font-size: 21px;
+            margin-bottom: 9px;
+            color: #1a2438;
+        }
+
+        .test-option p {
+            color: #737e93;
+            font-size: 14px;
+            line-height: 1.65;
+            min-height: 70px;
+        }
+
+        .test-info {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+
+        .info {
+            background: #f5f6f9;
+            color: #667188;
+            padding: 6px 9px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .start-btn {
+            display: block;
+            text-align: center;
+            text-decoration: none;
+            background: #263b80;
+            color: white;
+            padding: 12px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 700;
+            transition: 0.2s;
+        }
+
+        .start-btn:hover {
+            background: #1d2e68;
+        }
+
+        /* =========================
+           FEATURES
+        ========================= */
+
+        .features-section {
+            background: white;
+        }
+
+        .features {
+            max-width: 1050px;
+            margin: auto;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 25px;
+        }
+
+        .feature {
+            text-align: center;
+            padding: 25px;
+        }
+
+        .feature-icon {
+            width: 55px;
+            height: 55px;
+            margin: auto auto 17px;
+            border-radius: 15px;
+            background: #f0f2f9;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+        }
+
+        .feature h3 {
+            font-size: 17px;
+            margin-bottom: 9px;
+        }
+
+        .feature p {
+            color: #778196;
+            font-size: 13px;
+            line-height: 1.65;
+        }
+
+        /* =========================
+           CTA
+        ========================= */
+
+        .cta {
+            margin: 0 7% 80px;
+            border-radius: 24px;
+            background: #263b80;
+            color: white;
+            padding: 55px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta::before {
+            content: "";
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            border: 1px solid rgba(255,255,255,0.10);
+            top: -160px;
+            right: -80px;
+        }
+
+        .cta h2 {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .cta p {
+            color: #dbe2f5;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        .cta-btn {
+            display: inline-block;
+            text-decoration: none;
+            background: white;
+            color: #263b80;
+            padding: 13px 22px;
+            border-radius: 9px;
+            font-size: 13px;
+            font-weight: 800;
+            transition: 0.2s;
+        }
+
+        .cta-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        /* =========================
+           FOOTER
+        ========================= */
+
+        footer {
+            background: #171e2d;
+            color: white;
+            padding: 35px 7%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .footer-logo {
+            font-weight: 800;
+            font-size: 16px;
+        }
+
+        .footer-text {
+            color: #8993a7;
+            font-size: 12px;
+        }
+
+        /* =========================
+           MOBILE
+        ========================= */
+
+        @media (max-width: 900px) {
+
+            .hero {
+                flex-direction: column;
+                text-align: center;
+                padding-top: 60px;
+                padding-bottom: 60px;
+            }
+
+            .hero-content {
+                width: 100%;
+            }
+
+            .hero p {
+                margin-left: auto;
+                margin-right: auto;
+            }
+
+            .hero-buttons {
+                justify-content: center;
+            }
+
+            .hero-visual {
+                width: 100%;
+                justify-content: center;
+                margin-top: 45px;
+            }
+
+            .tests,
+            .features {
+                grid-template-columns: 1fr;
+                max-width: 550px;
+            }
+
+            .test-option p {
+                min-height: auto;
+            }
+        }
+
+        @media (max-width: 600px) {
+
+            nav {
+                height: 65px;
+                padding: 0 5%;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .logo {
+                font-size: 18px;
+            }
+
+            .hero {
+                padding: 50px 5%;
+            }
+
+            .hero h1 {
+                font-size: 42px;
+                letter-spacing: -1.5px;
+            }
+
+            .hero p {
+                font-size: 15px;
+            }
+
+            .hero-visual {
+                margin-top: 30px;
+            }
+
+            .test-card {
+                width: 100%;
+                max-width: 350px;
+            }
+
+            .section {
+                padding: 65px 5%;
+            }
+
+            .section-header h2 {
+                font-size: 29px;
+            }
+
+            .cta {
+                margin: 0 5% 60px;
+                padding: 40px 22px;
+            }
+
+            .cta h2 {
+                font-size: 27px;
+            }
+
+            footer {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- =========================
+         NAVIGATION
+    ========================== -->
+
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">I</div>
+            IELTS Practice
+        </div>
+
+        <div class="nav-links">
+            <a href="#tests">Practice Tests</a>
+            <a href="#features">Features</a>
+        </div>
+    </nav>
+
+
+    <!-- =========================
+         HERO
+    ========================== -->
+
+    <section class="hero">
+
+        <div class="hero-content">
+
+            <div class="badge">
+                <span class="badge-dot"></span>
+                IELTS Practice Platform
+            </div>
+
+            <h1>
+                Practice smarter.<br>
+                <span>Achieve your goal.</span>
+            </h1>
+
+            <p>
+                Improve your IELTS skills with realistic Reading and
+                Listening practice tests. Choose a test, start practicing,
+                and track your performance.
+            </p>
+
+            <div class="hero-buttons">
+                <a href="#tests" class="primary-btn">
+                    Start Practicing
+                </a>
+
+                <a href="#features" class="secondary-btn">
+                    Explore Features
+                </a>
+            </div>
+
+        </div>
+
+
+        <div class="hero-visual">
+
+            <div class="test-card">
+
+                <div class="test-card-top">
+                    <div class="test-card-title">
+                        YOUR IELTS PRACTICE
+                    </div>
+
+                    <div class="live">
+                        ● Ready
+                    </div>
+                </div>
+
+                <div class="score">
+                    <div class="score-number">7.5</div>
+                    <div class="score-label">
+                        Target Band Score
+                    </div>
+                </div>
+
+                <div class="mini-progress">
+
+                    <div class="mini-progress-row">
+                        <span>Reading</span>
+                        <strong>76%</strong>
+                    </div>
+
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+
+                </div>
+
+                <div class="mini-progress">
+
+                    <div class="mini-progress-row">
+                        <span>Listening</span>
+                        <strong>82%</strong>
+                    </div>
+
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width:82%;"></div>
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         TEST SELECTION
+    ========================== -->
+
+    <section class="section" id="tests">
+
+        <div class="section-header">
+
+            <div class="section-label">
+                Choose your test
+            </div>
+
+            <h2>Start your IELTS practice</h2>
+
+            <p>
+                Select a practice section below and begin your test.
+                Each test is designed to give you a realistic IELTS
+                practice experience.
+            </p>
+
+        </div>
+
+
+        <div class="tests">
+
+            <!-- READING -->
+
+            <div class="test-option">
+
+                <div class="test-icon reading-icon">
+                    📖
+                </div>
+
+                <h3>IELTS Reading</h3>
+
+                <p>
+                    Practice IELTS Reading with passages,
+                    multiple question types, automatic timing,
+                    and instant results.
+                </p>
+
+                <div class="test-info">
+                    <span class="info">60 Minutes</span>
+                    <span class="info">40 Questions</span>
+                    <span class="info">Academic</span>
+                </div>
+
+                <a href="IELTSR/index.html" class="start-btn">
+                    Start Reading →
+                </a>
+
+            </div>
+
+
+            <!-- LISTENING 5 -->
+
+            <div class="test-option">
+
+                <div class="test-icon listening-icon">
+                    🎧
+                </div>
+
+                <h3>IELTS Listening 5</h3>
+
+                <p>
+                    Complete a full IELTS Listening practice test
+                    with audio, answer fields, automatic timing,
+                    and result calculation.
+                </p>
+
+                <div class="test-info">
+                    <span class="info">30+ Minutes</span>
+                    <span class="info">40 Questions</span>
+                    <span class="info">4 Parts</span>
+                </div>
+
+                <a href="IELTS5/index.html" class="start-btn">
+                    Start Listening →
+                </a>
+
+            </div>
+
+
+            <!-- LISTENING 6 -->
+
+            <div class="test-option">
+
+                <div class="test-icon listening-icon-2">
+                    🎧
+                </div>
+
+                <h3>IELTS Listening 6</h3>
+
+                <p>
+                    Challenge yourself with another IELTS
+                    Listening practice test and measure your
+                    performance.
+                </p>
+
+                <div class="test-info">
+                    <span class="info">30+ Minutes</span>
+                    <span class="info">40 Questions</span>
+                    <span class="info">4 Parts</span>
+                </div>
+
+                <a href="IELTS6/index.html" class="start-btn">
+                    Start Listening →
+                </a>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         FEATURES
+    ========================== -->
+
+    <section class="section features-section" id="features">
+
+        <div class="section-header">
+
+            <div class="section-label">
+                Practice tools
+            </div>
+
+            <h2>Everything you need to practice</h2>
+
+            <p>
+                A simple practice environment designed to help you
+                focus on the test instead of complicated interfaces.
+            </p>
+
+        </div>
+
+
+        <div class="features">
+
+            <div class="feature">
+
+                <div class="feature-icon">
+                    ⏱
+                </div>
+
+                <h3>Realistic Timing</h3>
+
+                <p>
+                    Practice under realistic IELTS time limits
+                    and improve your time management.
+                </p>
+
+            </div>
+
+
+            <div class="feature">
+
+                <div class="feature-icon">
+                    ✓
+                </div>
+
+                <h3>Instant Results</h3>
+
+                <p>
+                    Submit your answers and see your performance
+                    immediately after completing a test.
+                </p>
+
+            </div>
+
+
+            <div class="feature">
+
+                <div class="feature-icon">
+                    📊
+                </div>
+
+                <h3>Track Performance</h3>
+
+                <p>
+                    Review your answers and identify areas where
+                    you need more practice.
+                </p>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         CTA
+    ========================== -->
+
+    <section class="cta">
+
+        <h2>Ready to practice?</h2>
+
+        <p>
+            Choose a section and start your IELTS practice now.
+        </p>
+
+        <a href="#tests" class="cta-btn">
+            Choose a Test
+        </a>
+
+    </section>
+
+
+    <!-- =========================
+         FOOTER
+    ========================== -->
+
+    <footer>
+
+        <div class="footer-logo">
+            IELTS Practice
+        </div>
+
+        <div class="footer-text">
+            Practice • Improve • Achieve
+        </div>
+
+        <div class="footer-text">
+            © 2026 IELTS Practice
+        </div>
+
+    </footer>
+
+
+</body>
+</html>
+```
