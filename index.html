@@ -622,6 +622,28 @@
                 text-align: center;
             }
         }
+
+        .portal-screen{display:none;min-height:70vh;padding:75px 7%;background:radial-gradient(circle at 85% 15%,rgba(76,103,190,.12),transparent 28%),#f5f7fb}
+        .portal-screen.active{display:block}
+        .portal-inner{max-width:1150px;margin:0 auto}
+        .portal-back{display:inline-flex;align-items:center;gap:8px;border:1px solid #dfe3eb;background:#fff;color:#34405b;padding:11px 16px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;margin-bottom:30px}
+        .portal-back:hover{border-color:#bbc4d8;transform:translateY(-1px)}
+        .portal-header{text-align:center;max-width:700px;margin:0 auto 45px}
+        .portal-icon{width:70px;height:70px;border-radius:18px;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:32px}
+        .portal-icon.listening{background:#eef7f4}
+        .portal-header h2{font-size:clamp(32px,4vw,46px);color:#172033;margin-bottom:12px}
+        .portal-header p{color:#737e93;line-height:1.7;font-size:15px}
+        .portal-tests{display:grid;grid-template-columns:repeat(3,1fr);gap:22px}
+        .portal-test-card{background:#fff;border:1px solid #e4e8ef;border-radius:18px;padding:28px;transition:.25s}
+        .portal-test-card:hover{transform:translateY(-5px);box-shadow:0 18px 40px rgba(30,44,75,.10);border-color:#ccd3e3}
+        .portal-test-number{color:#4059a2;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+        .portal-test-card h3{color:#1a2438;font-size:21px;margin-bottom:9px}
+        .portal-test-card p{color:#737e93;font-size:14px;line-height:1.65;min-height:68px}
+        .portal-test-info{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}
+        .portal-test-info span{background:#f5f6f9;color:#667188;padding:6px 9px;border-radius:6px;font-size:11px;font-weight:600}
+        @media(max-width:900px){.portal-tests{grid-template-columns:1fr;max-width:550px;margin:auto}}
+        @media(max-width:600px){.portal-screen{padding:55px 5%}.portal-header h2{font-size:31px}}
+
     </style>
 </head>
 
@@ -760,173 +782,112 @@
 
         <div class="tests">
 
-            <!-- READING -->
-
             <div class="test-option">
-
-                <div class="test-icon reading-icon">
-                    📖
-                </div>
-
+                <div class="test-icon reading-icon">📖</div>
                 <h3>IELTS Reading</h3>
-
                 <p>
-                    Practice IELTS Reading with passages,
-                    multiple question types, automatic timing,
-                    and instant results.
+                    Enter the Reading practice portal and choose
+                    the Reading test you want to complete.
                 </p>
-
                 <div class="test-info">
                     <span class="info">60 Minutes</span>
                     <span class="info">40 Questions</span>
                     <span class="info">Academic</span>
                 </div>
-
                 <a href="IELTSR/index.html" class="start-btn">
-                    Start Reading →
+                    Enter Reading Portal →
                 </a>
-
-            </div>
-
-
-            <!-- LISTENING 5 -->
-
-            <div class="test-option">
-
-                <div class="test-icon listening-icon">
-                    🎧
-                </div>
-
-                <h3>IELTS Listening 5</h3>
-
-                <p>
-                    Complete a full IELTS Listening practice test
-                    with audio, answer fields, automatic timing,
-                    and result calculation.
-                </p>
-
-                <div class="test-info">
-                    <span class="info">30+ Minutes</span>
-                    <span class="info">40 Questions</span>
-                    <span class="info">4 Parts</span>
-                </div>
-
-                <a href="IELTS5/index.html" class="start-btn">
-                    Start Listening →
-                </a>
-
-            </div>
-
-
-            <!-- LISTENING 6 -->
-
-            <div class="test-option">
-
-                <div class="test-icon listening-icon-2">
-                    🎧
-                </div>
-
-                <h3>IELTS Listening 6</h3>
-
-                <p>
-                    Challenge yourself with another IELTS
-                    Listening practice test and measure your
-                    performance.
-                </p>
-
-                <div class="test-info">
-                    <span class="info">30+ Minutes</span>
-                    <span class="info">40 Questions</span>
-                    <span class="info">4 Parts</span>
-                </div>
-
-                <a href="IELTS6/index.html" class="start-btn">
-                    Start Listening →
-                </a>
-
             </div>
 
             <div class="test-option">
-
-                <div class="test-icon listening-icon-2">
-                    🎧
-                </div>
-
-                <h3>IELTS Listening 7</h3>
-
+                <div class="test-icon listening-icon">🎧</div>
+                <h3>IELTS Listening</h3>
                 <p>
-                    Challenge yourself with another IELTS
-                    Listening practice test and measure your
-                    performance.
+                    Enter the Listening practice portal first,
+                    then choose from the available Listening tests.
                 </p>
-
                 <div class="test-info">
                     <span class="info">30+ Minutes</span>
                     <span class="info">40 Questions</span>
                     <span class="info">4 Parts</span>
                 </div>
-
-                <a href="IELTS7/index.html" class="start-btn">
-                    Start Listening →
+                <a href="#listeningPortal" class="start-btn" id="openListeningPortal">
+                    Enter Listening Portal →
                 </a>
-
-            </div>
-
-              <div class="test-option">
-
-                <div class="test-icon listening-icon-2">
-                    🎧
-                </div>
-
-                <h3>IELTS Listening 8</h3>
-
-                <p>
-                    Challenge yourself with another IELTS
-                    Listening practice test and measure your
-                    performance.
-                </p>
-
-                <div class="test-info">
-                    <span class="info">30+ Minutes</span>
-                    <span class="info">40 Questions</span>
-                    <span class="info">4 Parts</span>
-                </div>
-
-                <a href="IELTS8/index.html" class="start-btn">
-                    Start Listening →
-                </a>
-
-            </div>
-            <div class="test-option">
-
-                <div class="test-icon listening-icon-2">
-                    🎧
-                </div>
-
-                <h3>IELTS Listening 9</h3>
-
-                <p>
-                    Challenge yourself with another IELTS
-                    Listening practice test and measure your
-                    performance.
-                </p>
-
-                <div class="test-info">
-                    <span class="info">30+ Minutes</span>
-                    <span class="info">40 Questions</span>
-                    <span class="info">4 Parts</span>
-                </div>
-
-                <a href="IELTS9/index.html" class="start-btn">
-                    Start Listening →
-                </a>
-
             </div>
 
         </div>
 
     </section>
 
+
+
+    <!-- =========================
+         LISTENING PORTAL
+    ========================== -->
+
+    <section id="listeningPortal" class="portal-screen">
+        <div class="portal-inner">
+
+            <button type="button" class="portal-back" id="backFromListeningPortal">
+                ← Back to IELTS Sections
+            </button>
+
+            <div class="portal-header">
+                <div class="portal-icon listening">🎧</div>
+                <h2>IELTS Listening Portal</h2>
+                <p>
+                    Choose a Listening practice test below.
+                    You will enter the selected test only after
+                    choosing it from this portal.
+                </p>
+            </div>
+
+            <div class="portal-tests">
+
+                <div class="portal-test-card">
+                    <div class="portal-test-number">Listening Test 5</div>
+                    <h3>IELTS Listening 5</h3>
+                    <p>Full Listening practice test with audio, questions, timing, and automatic results.</p>
+                    <div class="portal-test-info"><span>30+ Minutes</span><span>40 Questions</span><span>4 Parts</span></div>
+                    <a href="IELTS5/index.html" class="start-btn">Start Test 5 →</a>
+                </div>
+
+                <div class="portal-test-card">
+                    <div class="portal-test-number">Listening Test 6</div>
+                    <h3>IELTS Listening 6</h3>
+                    <p>Complete another full Listening practice test and check your performance.</p>
+                    <div class="portal-test-info"><span>30+ Minutes</span><span>40 Questions</span><span>4 Parts</span></div>
+                    <a href="IELTS6/index.html" class="start-btn">Start Test 6 →</a>
+                </div>
+
+                <div class="portal-test-card">
+                    <div class="portal-test-number">Listening Test 7</div>
+                    <h3>IELTS Listening 7</h3>
+                    <p>Practice another Listening paper with realistic timing and question types.</p>
+                    <div class="portal-test-info"><span>30+ Minutes</span><span>40 Questions</span><span>4 Parts</span></div>
+                    <a href="IELTS7/index.html" class="start-btn">Start Test 7 →</a>
+                </div>
+
+                <div class="portal-test-card">
+                    <div class="portal-test-number">Listening Test 8</div>
+                    <h3>IELTS Listening 8</h3>
+                    <p>Continue your Listening practice with another complete IELTS test.</p>
+                    <div class="portal-test-info"><span>30+ Minutes</span><span>40 Questions</span><span>4 Parts</span></div>
+                    <a href="IELTS8/index.html" class="start-btn">Start Test 8 →</a>
+                </div>
+
+                <div class="portal-test-card">
+                    <div class="portal-test-number">Listening Test 9</div>
+                    <h3>IELTS Listening 9</h3>
+                    <p>Challenge yourself with another complete Listening practice test.</p>
+                    <div class="portal-test-info"><span>30+ Minutes</span><span>40 Questions</span><span>4 Parts</span></div>
+                    <a href="IELTS9/index.html" class="start-btn">Start Test 9 →</a>
+                </div>
+
+            </div>
+        </div>
+    </section>
 
     <!-- =========================
          FEATURES
@@ -1043,6 +1004,51 @@
 
     </footer>
 
+
+
+    <script>
+    (function(){
+        const openBtn=document.getElementById("openListeningPortal");
+        const portal=document.getElementById("listeningPortal");
+        const backBtn=document.getElementById("backFromListeningPortal");
+
+        const mainSections=[
+            document.querySelector("nav"),
+            document.querySelector(".hero"),
+            document.getElementById("tests"),
+            document.querySelector(".features-section"),
+            document.querySelector(".cta"),
+            document.querySelector("footer")
+        ];
+
+        function openPortal(){
+            mainSections.forEach(function(el){
+                if(el) el.style.display="none";
+            });
+            portal.classList.add("active");
+            history.replaceState(null,"","#listeningPortal");
+            window.scrollTo(0,0);
+        }
+
+        function closePortal(){
+            portal.classList.remove("active");
+            mainSections.forEach(function(el){
+                if(el) el.style.display="";
+            });
+            history.replaceState(null,"","#tests");
+            window.scrollTo(0,0);
+        }
+
+        if(openBtn) openBtn.addEventListener("click",function(e){
+            e.preventDefault();
+            openPortal();
+        });
+
+        if(backBtn) backBtn.addEventListener("click",closePortal);
+
+        if(location.hash==="#listeningPortal") openPortal();
+    })();
+    </script>
 
 </body>
 </html>
