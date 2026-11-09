@@ -8,7 +8,7 @@ let part=0,answers={},finished=false,timeLeft=1800,audioURL=null;const $=id=>doc
 function norm(v){return String(v??'').trim().toLowerCase().replace(/[’]/g,"'").replace(/\s+/g,' ')}
 function setAnswer(q,v){answers[q]=v;updateNav();updateCount()}
 function isAnswered(q){const v=answers[q];return Array.isArray(v)?v.length>0:String(v??'').trim()!==''}
-function current(){return PARTS[part]}
+function current(){return PARTS[part]} 
 function updateCount(){let c=0;for(let q=current().start;q<=current().end;q++)if(isAnswered(q))c++;$('answeredCount').textContent=c}
 function updateNav(){document.querySelectorAll('.q-nav').forEach(b=>{const q=+b.dataset.q;b.classList.toggle('answered',isAnswered(q));b.classList.toggle('active',q>=current().start&&q<=current().end)})}
 function buildNav(){const n=$('questionNav');n.innerHTML='';for(let q=current().start;q<=current().end;q++){const b=document.createElement('button');b.className='q-nav';b.dataset.q=q;b.textContent=q;b.onclick=()=>{const el=document.querySelector(`[data-q-anchor="${q}"]`);if(el)el.scrollIntoView({behavior:'smooth',block:'center'})};n.appendChild(b)}updateNav()}
